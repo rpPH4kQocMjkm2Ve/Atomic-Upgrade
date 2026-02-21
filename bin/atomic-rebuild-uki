@@ -32,8 +32,16 @@ list_orphans() {
     echo ""
 
     local found=0
+    local -a dirs=()
     for dir in "${BTRFS_MOUNT}"/root-[0-9]*; do
         [[ -d "$dir" ]] || continue
+        dirs+=("$dir")
+    done
+
+    # Reverse sort — newest first
+    IFS=$'\n' dirs=($(printf '%s\n' "${dirs[@]}" | sort -r)); unset IFS
+
+    for dir in "${dirs[@]}"; do
         local name="${dir##*/}"
         local gen_id="${name#root-}"
         local uki="${ESP}/EFI/Linux/arch-${gen_id}.efi"
