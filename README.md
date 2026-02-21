@@ -91,8 +91,8 @@ Edit `/etc/atomic.conf`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `BTRFS_MOUNT` | `/mnt/temp_root` | Btrfs top-level mount point |
-| `NEW_ROOT` | `/mnt/newroot` | New snapshot mount point |
+| `BTRFS_MOUNT` | `/run/atomic/temp_root` | Btrfs top-level mount point |
+| `NEW_ROOT` | `/run/atomic/newroot` | New snapshot mount point |
 | `ESP` | `/efi` | EFI System Partition |
 | `KEEP_GENERATIONS` | `3` | Generations to keep (excluding current) |
 | `MAPPER_NAME` | `root_crypt` | dm-crypt mapper name (fallback if auto-detection fails) |
