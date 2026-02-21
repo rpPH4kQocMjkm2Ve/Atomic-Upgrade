@@ -314,9 +314,13 @@ build_uki() {
     # Extract kernel version from modules directory inside the snapshot
     local uname_ver=""
     local modules_dir="${new_root}/usr/lib/modules"
-    if [[ -d "$modules_dir" ]]; then
-        uname_ver=$(ls -1 "$modules_dir" | grep -E '^[0-9]+\.' | sort -V | tail -1)
-    fi
+    for d in "${modules_dir}"/*/; do
+        [[ -f "${d}pkgbase" ]] || continue
+        if [[ "$(cat "${d}pkgbase")" == "$KERNEL_PKG" ]]; then
+            uname_ver="${d##*/}"
+            break
+        fi
+    done
 
     local root_cmdline
     root_cmdline=$(python3 /usr/lib/atomic/rootdev.py cmdline "$new_subvol") || {
@@ -421,6 +425,7 @@ garbage_collect() {
         local name="${d##*/}"
         local gen="${name#root-}"
         [[ "$name" == "$current_subvol" ]] && continue
+        [[ "$gen" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
         if [[ ! -f "${ESP}/EFI/Linux/arch-${gen}.efi" ]]; then
             echo "   Orphan: ${name} (no UKI)"
             if [[ "$dry_run" -eq 0 ]]; then
