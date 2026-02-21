@@ -23,5 +23,5 @@ uninstall:
 	rm -rf $(DESTDIR)$(PREFIX)/lib/atomic/
 	rm -f $(DESTDIR)$(PREFIX)/share/libalpm/hooks/00-block-direct-upgrade.hook
 	rm -f $(DESTDIR)$(PREFIX)/local/bin/pacman
-	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/$(pkgname)
+	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/$(pkgname)/
 	@echo "Note: /etc/atomic.conf preserved. Remove manually if needed."
