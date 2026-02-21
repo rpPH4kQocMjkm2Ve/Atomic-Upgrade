@@ -4,8 +4,6 @@
 # Rebuild a signed UKI for an existing generation subvolume.
 # Use case: accidentally deleted .efi file, orphaned snapshot.
 
-[[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
-
 set -euo pipefail
 
 source /usr/lib/atomic/common.sh
@@ -60,6 +58,8 @@ case "${1:-}" in
         exit 0
         ;;
 esac
+
+[[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
 
 GEN_ID="${1:?Usage: atomic-rebuild-uki <GEN_ID>}"
 

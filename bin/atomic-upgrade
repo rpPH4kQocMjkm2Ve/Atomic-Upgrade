@@ -5,8 +5,6 @@
 # Creates a snapshot of the current root, runs a command in a chroot,
 # builds a signed UKI, and registers it for next boot.
 
-[[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
-
 set -euo pipefail
 
 VERSION="0.0.3"
@@ -44,6 +42,8 @@ case "${1:-}" in
     -h|--help) show_help ;;
     -V|--version) echo "atomic-upgrade v${VERSION}"; exit 0 ;;
 esac
+
+[[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
 
 export ATOMIC_UPGRADE=1
 source /usr/lib/atomic/common.sh
