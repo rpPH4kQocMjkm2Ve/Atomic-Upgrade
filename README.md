@@ -143,7 +143,7 @@ To disable: `sudo rm /usr/local/bin/pacman`
 - Btrfs root filesystem
 - systemd-boot
 - Secure Boot set up with sbctl (keys enrolled)
-- Root on a Btrfs subvolume (e.g. `@` or `root`)
+- Root on a Btrfs subvolume (any name — snapshots are created as `root-<timestamp>`)
 
 ### Dependencies
 
