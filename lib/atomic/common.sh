@@ -6,8 +6,8 @@
 
 # ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 
-BTRFS_MOUNT="/mnt/temp_root"
-NEW_ROOT="/mnt/newroot"
+BTRFS_MOUNT="/run/atomic/temp_root"
+NEW_ROOT="/run/atomic/newroot"
 ESP="/efi"
 KEEP_GENERATIONS=3
 MAPPER_NAME="root_crypt"
