@@ -327,7 +327,6 @@ build_uki() {
     local cmdline="${root_cmdline} ${KERNEL_PARAMS}"
 
     os_release_tmp=$(mktemp) || { echo "ERROR: Cannot create temp file" >&2; return 1; }
-    trap 'rm -f "$os_release_tmp"' RETURN
 
     sed "s|^PRETTY_NAME=.*|PRETTY_NAME=\"Arch Linux (${gen_id})\"|" \
         "${new_root}/etc/os-release" > "$os_release_tmp" || {
@@ -351,11 +350,13 @@ build_uki() {
 
     if ! "${ukify_args[@]}"; then
         echo "ERROR: ukify build failed" >&2
+        rm -f "$os_release_tmp"
         return 1
     fi
 
-    [[ -f "$uki_path" ]] || { echo "ERROR: UKI not created" >&2; return 1; }
+    [[ -f "$uki_path" ]] || { echo "ERROR: UKI not created" >&2; rm -f "$os_release_tmp"; return 1; }
 
+    rm -f "$os_release_tmp"
     echo "$uki_path"
 }
 
