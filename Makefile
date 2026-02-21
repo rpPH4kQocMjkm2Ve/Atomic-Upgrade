@@ -12,9 +12,14 @@ install:
 	install -Dm755 lib/atomic/rootdev.py  $(DESTDIR)$(PREFIX)/lib/atomic/rootdev.py
 	install -Dm644 hooks/00-block-direct-upgrade.hook \
 		$(DESTDIR)$(PREFIX)/share/libalpm/hooks/00-block-direct-upgrade.hook
-	install -Dm644 etc/atomic.conf $(DESTDIR)$(SYSCONFDIR)/atomic.conf
 	install -Dm755 extras/pacman-wrapper $(DESTDIR)$(PREFIX)/local/bin/pacman
 	install -Dm644 LICENSE $(DESTDIR)/usr/share/licenses/$(pkgname)/LICENSE
+	@if [ ! -f $(DESTDIR)$(SYSCONFDIR)/atomic.conf ]; then \
+		install -Dm644 etc/atomic.conf $(DESTDIR)$(SYSCONFDIR)/atomic.conf; \
+		echo "Installed default config"; \
+	else \
+		echo "Config exists, skipping (see etc/atomic.conf for defaults)"; \
+	fi
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/atomic-upgrade
@@ -26,3 +31,8 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/local/bin/pacman
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/$(pkgname)/
 	@echo "Note: /etc/atomic.conf preserved. Remove manually if needed."
+
+reinstall: install
+
+install-conf:
+	install -Dm644 etc/atomic.conf $(DESTDIR)$(SYSCONFDIR)/atomic.conf
