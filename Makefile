@@ -1,5 +1,6 @@
 PREFIX = /usr
 SYSCONFDIR = /etc
+pkgname = atomic-upgrade
 
 install:
 	install -Dm755 bin/atomic-upgrade     $(DESTDIR)$(PREFIX)/bin/atomic-upgrade
