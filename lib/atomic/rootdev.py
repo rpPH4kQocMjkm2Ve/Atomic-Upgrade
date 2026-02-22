@@ -86,8 +86,12 @@ def detect_root() -> dict:
         mapper = source.rsplit("/", 1)[-1]
         _detect_dm_type(mapper, info)
 
-    return info
+    if info["type"] == "plain" and source.startswith("/dev/"):
+        uuid = run("blkid", "-s", "UUID", "-o", "value", source)
+        if uuid:
+            info["root_arg"] = f"UUID={uuid}"
 
+    return info
 
 def _detect_dm_type(mapper: str, info: dict) -> None:
     """Detect whether a device-mapper target is LUKS, LVM, or both.
