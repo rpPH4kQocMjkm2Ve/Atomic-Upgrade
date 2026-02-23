@@ -438,6 +438,18 @@ garbage_collect() {
         fi
     done
 
+    for uki in "${ESP}/EFI/Linux/arch-"*.efi; do
+        [[ -e "$uki" ]] || continue
+        local uki_name="${uki##*/}"
+        uki_name="${uki_name#arch-}"; uki_name="${uki_name%.efi}"
+        [[ "root-${uki_name}" == "$current_subvol" ]] && continue
+        [[ "$uki_name" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
+        if [[ ! -d "${BTRFS_MOUNT}/root-${uki_name}" ]]; then
+            echo "   Orphan UKI: ${uki_name} (no subvolume)"
+            [[ "$dry_run" -eq 0 ]] && rm -f "$uki"
+        fi
+    done
+
     echo ":: Garbage collection done"
 }
 
