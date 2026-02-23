@@ -45,12 +45,14 @@ sudo atomic-upgrade                                    # full system upgrade
 sudo atomic-upgrade --dry-run                          # preview without changes
 sudo atomic-upgrade -t pre-nvidia                      # upgrade with custom tag
 sudo atomic-upgrade --no-gc                            # upgrade without garbage collection
-sudo atomic-upgrade -- pacman -S nvidia-dkms           # install specific package
+sudo atomic-upgrade -- pacman -S nvidia                # install specific package
 sudo atomic-upgrade -t nvidia -- pacman -S nvidia-dkms # custom command with tag
+sudo atomic-upgrade --no-gc -t cleanup -- pacman -Rns firefox
 sudo atomic-gc                                         # clean old generations (keep last 3 + current)
 sudo atomic-gc --dry-run 2                             # preview: keep last 2
 sudo atomic-gc list                                    # list all generations
 sudo atomic-gc rm 20260217-143022                      # delete specific generation
+sudo atomic-gc rm -y 20260217-143022 20260216-235122   # delete multiple without confirmation
 sudo atomic-rebuild-uki --list                         # show subvolumes and UKI status
 sudo atomic-rebuild-uki 20250208-134725                # rebuild UKI for specific generation
 ```
@@ -59,6 +61,7 @@ sudo atomic-rebuild-uki 20250208-134725                # rebuild UKI for specifi
 
 ```
 :: Current: /root-20260220-141710 → New: /root-20260221-010551
+:: Command: /usr/bin/pacman -Syu
 :: Verifying current system...
 :: Verifying current subvolume...
 :: Checking disk space...
@@ -77,6 +80,7 @@ Wrote unsigned /efi/EFI/Linux/arch-20260221-010551.efi
 :: Verifying signature...
 ✓ /efi/EFI/Linux/arch-20260221-010551.efi is signed
 :: Running garbage collection...
+:: Garbage collecting (keeping last 3 + current)...
    Keeping: 20260221-010551
    Keeping: 20260220-141710 (current)
    Keeping: 20260216-235122
@@ -99,6 +103,8 @@ Edit `/etc/atomic.conf`:
 | `KERNEL_PKG` | `linux` | Kernel package (linux/linux-lts/linux-zen) |
 | `KERNEL_PARAMS` | *(security defaults)* | Kernel command line parameters |
 
+Default `KERNEL_PARAMS`: `rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off`
+
 Root device is auto-detected (LUKS, LVM, LUKS+LVM, plain Btrfs). `MAPPER_NAME` is only used as a fallback if auto-detection fails.
 
 ### Example: TPM2 auto-unlock
@@ -114,18 +120,21 @@ The system has two optional layers preventing accidental direct upgrades:
 **Pacman hook** (`atomic-guard`) — blocks `pacman -Syu` at the hook level. Installed automatically. Allows:
 - Package installs without `--sysupgrade` (`pacman -S`, `-R`, etc.)
 - Upgrades via `atomic-upgrade` (env var + lock verification)
-- Upgrades via AUR helpers (`yay`, `paru`, etc.)
+- Upgrades via AUR helpers (`yay`, `paru`, `pikaur`, `aura`)
 
 ### Pacman wrapper
 
 A wrapper at `/usr/local/bin/pacman` intercepts `pacman -Syu` and suggests
 `atomic-upgrade` instead. It detects AUR helpers to avoid double prompts.
+Also warns about `-Sy` without `-u` (partial upgrade risk).
 
 To disable: `sudo rm /usr/local/bin/pacman`
 
 ## Garbage collection
 
-`atomic-gc` and the GC phase of `atomic-upgrade` keep the last N generations (default 3) plus the currently booted one. After deleting old generations, an orphan sweep removes any `root-*` subvolumes that have no matching UKI on the ESP.
+`atomic-gc` and the GC phase of `atomic-upgrade` keep the last N generations (default 3) plus the currently booted one. After deleting old generations, an orphan sweep removes:
+- `root-*` subvolumes that have no matching UKI on the ESP
+- UKI files on the ESP that have no matching subvolume
 
 ## Components
 
@@ -137,7 +146,8 @@ To disable: `sudo rm /usr/local/bin/pacman`
 | `atomic-rebuild-uki` | Rebuild UKI for existing snapshot |
 | `common.sh` | Shared library (config, locking, btrfs, UKI build, GC) |
 | `fstab.py` | Safe fstab editing (atomic write + verification + rollback) |
-| `rootdev.py` | Auto-detect root device type (LUKS/LVM/plain) |
+| `rootdev.py` | Auto-detect root device type (LUKS/LVM/plain) and build kernel cmdline |
+| `pacman-wrapper` | Optional `/usr/local/bin/pacman` wrapper |
 
 ## Requirements
 
