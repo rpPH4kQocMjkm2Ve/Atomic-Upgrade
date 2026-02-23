@@ -41,6 +41,10 @@ load_config() {
         value="${value#"${value%%[![:space:]]*}"}"
         value="${value%"${value##*[![:space:]]}"}"
 
+        # Strip inline comments
+        value="${value%%#*}"
+        value="${value%"${value##*[![:space:]]}"}"
+
         # Skip comments and blank lines
         [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
 
