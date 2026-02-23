@@ -107,7 +107,7 @@ cleanup() {
     local exit_code=$?
     set +e
 
-    echo ":: Cleaning up..."
+    [[ $exit_code -ne 0 ]] && echo ":: Cleaning up..."
 
     # Recursive unmount handles any leftover bind mounts from arch-chroot
     if [[ -n "${NEW_ROOT:-}" ]] && mountpoint -q "$NEW_ROOT" 2>/dev/null; then
