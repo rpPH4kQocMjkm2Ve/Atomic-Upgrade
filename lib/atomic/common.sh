@@ -271,7 +271,7 @@ check_btrfs_space() {
 check_esp_space() {
     local min_mb="${1:-100}"
     local avail_kb
-    avail_kb=$(df -k "$ESP" | awk 'NR==2 {print $4}')
+    avail_kb=$(df -k --output=avail "$ESP" 2>/dev/null | tail -1 | tr -d ' ')
 
     if [[ -z "$avail_kb" ]]; then
         echo "WARN: Cannot check ESP space" >&2
