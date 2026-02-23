@@ -39,7 +39,7 @@ list_orphans() {
     done
 
     # Reverse sort — newest first
-    IFS=$'\n' dirs=($(printf '%s\n' "${dirs[@]}" | sort -r)); unset IFS
+    readarray -t dirs < <(printf '%s\n' "${dirs[@]}" | sort -r)
 
     for dir in "${dirs[@]}"; do
         local name="${dir##*/}"

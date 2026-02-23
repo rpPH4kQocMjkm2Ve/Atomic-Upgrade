@@ -336,6 +336,11 @@ build_uki() {
 
     os_release_tmp=$(mktemp) || { echo "ERROR: Cannot create temp file" >&2; return 1; }
 
+    [[ -f "${new_root}/etc/os-release" ]] || {
+        echo "ERROR: No os-release in snapshot" >&2
+        return 1
+    }
+
     sed "s|^PRETTY_NAME=.*|PRETTY_NAME=\"Arch Linux (${gen_id})\"|" \
         "${new_root}/etc/os-release" > "$os_release_tmp" || {
         echo "ERROR: Failed to create temp os-release" >&2
@@ -356,7 +361,7 @@ build_uki() {
         ukify_args+=(--uname="$uname_ver")
     fi
 
-    if ! "${ukify_args[@]}"; then
+    if ! "${ukify_args[@]}" >&2; then
         echo "ERROR: ukify build failed" >&2
         rm -f "$os_release_tmp"
         return 1
