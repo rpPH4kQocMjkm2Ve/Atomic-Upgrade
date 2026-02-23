@@ -326,6 +326,11 @@ build_uki() {
         fi
     done
 
+    # Fallback if pkgbase not found
+    if [[ -z "$uname_ver" && -d "$modules_dir" ]]; then
+        uname_ver=$(ls -1 "$modules_dir" | grep -E '^[0-9]+\.' | sort -V | tail -1)
+    fi
+
     local root_cmdline
     root_cmdline=$(python3 /usr/lib/atomic/rootdev.py cmdline "$new_subvol") || {
         echo "ERROR: Cannot detect root device for cmdline" >&2
