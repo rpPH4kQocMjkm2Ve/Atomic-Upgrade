@@ -179,6 +179,20 @@ To disable: `sudo rm /usr/local/bin/pacman`
 - Secure Boot set up with sbctl (keys enrolled)
 - Root on a Btrfs subvolume (any name — snapshots are created as `root-<timestamp>`)
 
+> **Important:** `/home`, `/var/log`, `/var/cache`, and other stateful data
+> should live on **separate Btrfs subvolumes**. Only the root subvolume is
+> snapshotted and rolled back — anything on the same subvolume will be
+> rolled back with it.
+>
+> ```
+> subvolid=5 (top-level)
+> ├── root         → /
+> ├── home         → /home
+> ├── log          → /var/log
+> ├── cache        → /var/cache
+> └── root-*       → atomic-upgrade generations
+> ```
+
 ### Dependencies
 
 Installed automatically via the AUR package:
