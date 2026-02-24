@@ -4,6 +4,8 @@
 # Pacman hook guard: blocks direct system upgrades.
 # Allows upgrades only when called from atomic-upgrade (via env + lock)
 # or from AUR helpers (yay, paru, etc.) which invoke pacman themselves.
+# Note: no "set -euo pipefail" here — the script relies on conditional
+# checks and process-tree walking that would break with errexit.
 
 if [[ -r /usr/lib/atomic/common.sh ]]; then
     source /usr/lib/atomic/common.sh 2>/dev/null || true
