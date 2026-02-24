@@ -434,7 +434,7 @@ garbage_collect() {
         echo "   Nothing to delete"
     else
         for gen_id in "${to_delete[@]}"; do
-            delete_generation "$gen_id" "$dry_run"
+            delete_generation "$gen_id" "$dry_run" "$current_subvol"
         done
         if [[ "$dry_run" -eq 0 ]]; then
             echo "   Deleted ${#to_delete[@]} generation(s)"
@@ -473,13 +473,15 @@ garbage_collect() {
 delete_generation() {
     local gen_id="$1"
     local dry_run="${2:-0}"
-    local current_subvol
-    current_subvol=$(get_current_subvol)
+    local current_subvol="${3:-}"
 
-    [[ -z "$current_subvol" ]] && {
-        echo "ERROR: Cannot determine current subvolume, refusing to delete" >&2
-        return 1
-    }
+    if [[ -z "$current_subvol" ]]; then
+        current_subvol=$(get_current_subvol)
+        [[ -z "$current_subvol" ]] && {
+            echo "ERROR: Cannot determine current subvolume, refusing to delete" >&2
+            return 1
+        }
+    fi
 
     if [[ "root-${gen_id}" == "$current_subvol" ]]; then
         echo "   REFUSE: ${gen_id} is current" >&2
