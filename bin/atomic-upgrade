@@ -211,7 +211,7 @@ update_fstab "${NEW_ROOT}/etc/fstab" "$CURRENT_SUBVOL" "$NEW_SUBVOL" || {
     exit 1
 }
 # Verification is handled inside fstab.py, but double-check here
-if ! grep -q "subvol=/${NEW_SUBVOL}\|subvol=${NEW_SUBVOL}" "${NEW_ROOT}/etc/fstab"; then
+if ! grep -Eq "subvol=/?${NEW_SUBVOL}" "${NEW_ROOT}/etc/fstab"; then
     echo "ERROR: fstab update verification failed" >&2
     exit 1
 fi
