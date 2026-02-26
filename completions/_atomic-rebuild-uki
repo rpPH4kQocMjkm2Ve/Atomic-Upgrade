@@ -1,0 +1,45 @@
+#compdef atomic-rebuild-uki
+
+_atomic_ruki_esp() {
+    setopt local_options no_glob
+    local esp="/efi"
+    if [[ -r /etc/atomic.conf ]]; then
+        local key val
+        while IFS='=' read -r key val; do
+            key="${key// /}"
+            [[ "$key" == "ESP" ]] || continue
+            val="${val%%\#*}"
+            val="${val#\"}" ; val="${val%\"}"
+            val="${val#\'}" ; val="${val%\'}"
+            val="${val## }" ; val="${val%% }"
+            [[ -n "$val" ]] && esp="$val"
+            break
+        done < /etc/atomic.conf
+    fi
+    print -r -- "$esp"
+}
+
+_atomic_ruki_gens() {
+    local esp f name
+    local -a gens=()
+
+    esp="$(_atomic_ruki_esp)"
+
+    for f in "$esp"/EFI/Linux/arch-*.efi(N); do
+        name="${f:t}"
+        name="${name#arch-}"
+        name="${name%.efi}"
+        gens+=("$name")
+    done
+
+    compadd "$@" -a gens
+}
+
+_atomic-rebuild-uki() {
+    _arguments \
+        '(- *)'{-h,--help}'[Show help]' \
+        '(- *)'{-l,--list}'[List subvolumes and UKI status]' \
+        '1:generation:_atomic_ruki_gens'
+}
+
+_atomic-rebuild-uki "$@"
