@@ -1,0 +1,65 @@
+#compdef atomic-gc
+
+_atomic_gc_esp() {
+    setopt local_options no_glob
+    local esp="/efi"
+    if [[ -r /etc/atomic.conf ]]; then
+        local key val
+        while IFS='=' read -r key val; do
+            key="${key// /}"
+            [[ "$key" == "ESP" ]] || continue
+            val="${val%%\#*}"
+            val="${val#\"}" ; val="${val%\"}"
+            val="${val#\'}" ; val="${val%\'}"
+            val="${val## }" ; val="${val%% }"
+            [[ -n "$val" ]] && esp="$val"
+            break
+        done < /etc/atomic.conf
+    fi
+    print -r -- "$esp"
+}
+
+_atomic_gc_gens() {
+    local esp f name
+    local -a gens=()
+
+    esp="$(_atomic_gc_esp)"
+
+    for f in "$esp"/EFI/Linux/arch-*.efi(N); do
+        name="${f:t}"
+        name="${name#arch-}"
+        name="${name%.efi}"
+        gens+=("$name")
+    done
+
+    compadd "$@" -a gens
+}
+
+_atomic-gc() {
+    local context state state_descr line
+    typeset -A opt_args
+
+    _arguments -C \
+        '(- *)'{-h,--help}'[Show help]' \
+        '1:command:((
+            list\:"List all generations"
+            rm\:"Delete specific generation(s)"
+        ))' \
+        '*::arg:->args' \
+        && return
+
+    case $state in
+        args)
+            case ${words[1]} in
+                rm)
+                    _arguments \
+                        '(-n --dry-run)'{-n,--dry-run}'[Show what would be done]' \
+                        '(-y --yes)'{-y,--yes}'[Skip confirmation]' \
+                        '*:generation:_atomic_gc_gens'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_atomic-gc "$@"
