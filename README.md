@@ -78,6 +78,28 @@ sudo atomic-rebuild-uki --list                         # show subvolumes and UKI
 sudo atomic-rebuild-uki 20250208-134725                # rebuild UKI for specific generation
 ```
 
+### Shell completion
+
+Tab completion is available for `atomic-gc` and `atomic-rebuild-uki` in both zsh and bash:
+
+```bash
+atomic-gc <TAB>              # → list  rm
+atomic-gc rm <TAB>           # → generation IDs from ESP
+atomic-rebuild-uki <TAB>     # → generation IDs from ESP
+atomic-rebuild-uki -<TAB>    # → --help --list -h -l
+```
+
+Completions are installed automatically. For bash, the `bash-completion` package must
+be installed and sourced in `~/.bashrc`:
+
+```bash
+# ~/.bashrc
+[[ -r /usr/share/bash-completion/bash_completion ]] && . /usr/share/bash-completion/bash_completion
+```
+
+For zsh, completions are picked up automatically after restarting the shell
+(`rm -f ~/.zcompdump* && exec zsh` if needed).
+
 ### Example run
 
 ```
@@ -169,6 +191,7 @@ To disable: `sudo rm /usr/local/bin/pacman`
 | `fstab.py` | Safe fstab editing (atomic write + verification + rollback) |
 | `rootdev.py` | Auto-detect root device type (LUKS/LVM/plain) and build kernel cmdline |
 | `pacman-wrapper` | Optional `/usr/local/bin/pacman` wrapper |
+| `completions/` | Zsh and bash tab completions for `atomic-gc` and `atomic-rebuild-uki` |
 
 ## Requirements
 
@@ -205,3 +228,4 @@ Installed automatically via the AUR package:
 Optional:
 - `cryptsetup` — LUKS support
 - `lvm2` — LVM support
+- `bash-completion` — bash tab completions
