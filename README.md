@@ -71,7 +71,7 @@ sudo atomic-upgrade -t nvidia -- pacman -S nvidia-dkms # custom command with tag
 sudo atomic-upgrade --no-gc -t cleanup -- pacman -Rns firefox
 sudo atomic-gc                                         # clean old generations (keep last 3 + current)
 sudo atomic-gc --dry-run 2                             # preview: keep last 2
-sudo atomic-gc list                                    # list all generations
+atomic-gc list                                         # list all generations
 sudo atomic-gc rm 20260217-143022                      # delete specific generation
 sudo atomic-gc rm -y 20260217-143022 20260216-235122   # delete multiple without confirmation
 sudo atomic-rebuild-uki --list                         # show subvolumes and UKI status
