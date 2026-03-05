@@ -14,7 +14,7 @@ sudo atomic-upgrade
   3. Run command (default: pacman -Syu)
   4. Update fstab (subvol=)
   5. Build UKI (ukify)
-  6. Sign with sbctl (if SBCTL\_SIGN=1)
+  6. Sign with sbctl (if SBCTL_SIGN=1)
   7. Garbage collect old generations
         ↓
   reboot → new generation active
@@ -241,7 +241,7 @@ Installed automatically via the AUR package:
 - `arch-install-scripts` (provides `arch-chroot`)
 
 Optional:
-- `sbctl` — Secure Boot signing (enable with `SBCTL\_SIGN=1`)
+- `sbctl` — Secure Boot signing (enable with `SBCTL_SIGN=1`)
 - `cryptsetup` — LUKS support
 - `lvm2` — LVM support
 - `bash-completion` — bash tab completions
