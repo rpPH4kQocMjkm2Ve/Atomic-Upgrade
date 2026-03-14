@@ -1,5 +1,8 @@
 # atomic-upgrade
 
+[![CI](https://github.com/rpPH4kQocMjkm2Ve/atomic-upgrade/actions/workflows/ci.yml/badge.svg)](https://github.com/rpPH4kQocMjkm2Ve/atomic-upgrade/actions/workflows/ci.yml)
+![License](https://img.shields.io/github/license/rpPH4kQocMjkm2Ve/atomic-upgrade)
+
 Atomic system upgrades for Arch Linux on Btrfs + UKI + Secure Boot.
 
 NixOS/Silverblue-style generational updates on plain Arch: Btrfs snapshot → chroot → upgrade → build UKI → sign → reboot. Rollback is selecting a previous entry in systemd-boot.
