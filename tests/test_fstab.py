@@ -1,7 +1,6 @@
 """Tests for lib/atomic/fstab.py"""
 
 import os
-import tempfile
 from pathlib import Path
 
 import sys
@@ -127,116 +126,84 @@ class TestReplaceSubvol:
 
 
 class TestUpdateFstab:
-    @staticmethod
-    def _write(content: str) -> str:
-        fd, path = tempfile.mkstemp(suffix=".fstab")
-        os.write(fd, content.encode())
-        os.close(fd)
-        return path
-
-    @staticmethod
-    def _cleanup(path: str):
-        for suffix in ("", ".bak", ".tmp"):
-            p = path if not suffix else str(Path(path).with_suffix(suffix))
-            if os.path.exists(p):
-                os.unlink(p)
-
-    def test_basic_replacement(self):
-        path = self._write(
+    def test_basic_replacement(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
             "UUID=x / btrfs rw,subvol=/root-old 0 0\n"
             "UUID=y /home btrfs rw,subvol=home 0 0\n"
         )
-        try:
-            assert update_fstab(path, "root-old", "root-new")
-            text = Path(path).read_text()
-            assert "root-new" in text
-            assert "subvol=home" in text
-        finally:
-            self._cleanup(path)
+        assert update_fstab(str(path), "root-old", "root-new")
+        text = path.read_text()
+        assert "root-new" in text
+        assert "subvol=home" in text
 
-    def test_backup_created(self):
-        path = self._write("UUID=x / btrfs rw,subvol=root-old 0 0\n")
-        try:
-            update_fstab(path, "root-old", "root-new")
-            bak = Path(path).with_suffix(".bak")
-            assert bak.exists()
-            assert "root-old" in bak.read_text()
-        finally:
-            self._cleanup(path)
+    def test_backup_created(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x / btrfs rw,subvol=root-old 0 0\n")
+        update_fstab(str(path), "root-old", "root-new")
+        bak = tmp_path / "fstab.bak"
+        assert bak.exists()
+        assert "root-old" in bak.read_text()
 
-    def test_no_root_entry(self):
-        path = self._write("UUID=y /home btrfs rw,subvol=home 0 0\n")
-        try:
-            assert not update_fstab(path, "root-old", "root-new")
-        finally:
-            self._cleanup(path)
+    def test_no_root_entry(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=y /home btrfs rw,subvol=home 0 0\n")
+        assert not update_fstab(str(path), "root-old", "root-new")
 
-    def test_subvol_not_found(self):
-        path = self._write("UUID=x / btrfs rw,subvol=/root-other 0 0\n")
-        try:
-            assert not update_fstab(path, "root-old", "root-new")
-        finally:
-            self._cleanup(path)
+    def test_subvol_not_found(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x / btrfs rw,subvol=/root-other 0 0\n")
+        assert not update_fstab(str(path), "root-old", "root-new")
 
-    def test_preserves_comments(self):
-        path = self._write(
+    def test_preserves_comments(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
             "# root filesystem\n"
             "UUID=x / btrfs rw,subvol=root-old 0 0\n"
             "\n"
             "# home\n"
             "UUID=y /home btrfs rw,subvol=home 0 0\n"
         )
-        try:
-            update_fstab(path, "root-old", "root-new")
-            text = Path(path).read_text()
-            assert "# root filesystem" in text
-            assert "# home" in text
-        finally:
-            self._cleanup(path)
+        update_fstab(str(path), "root-old", "root-new")
+        text = path.read_text()
+        assert "# root filesystem" in text
+        assert "# home" in text
 
-    def test_preserves_blank_lines(self):
-        path = self._write(
+    def test_preserves_blank_lines(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
             "UUID=x / btrfs rw,subvol=root-old 0 0\n"
             "\n"
             "UUID=y /home btrfs rw,subvol=home 0 0\n"
         )
-        try:
-            update_fstab(path, "root-old", "root-new")
-            lines = Path(path).read_text().splitlines(keepends=True)
-            blank_count = sum(1 for l in lines if l.strip() == "")
-            assert blank_count >= 1
-        finally:
-            self._cleanup(path)
+        update_fstab(str(path), "root-old", "root-new")
+        lines = path.read_text().splitlines(keepends=True)
+        assert sum(1 for l in lines if l.strip() == "") >= 1
 
     def test_nonexistent_file(self):
         assert not update_fstab("/nonexistent/fstab", "old", "new")
 
-    def test_permissions_preserved(self):
-        path = self._write("UUID=x / btrfs rw,subvol=root-old 0 0\n")
-        os.chmod(path, 0o644)
-        try:
-            update_fstab(path, "root-old", "root-new")
-            mode = os.stat(path).st_mode & 0o7777
-            assert mode == 0o644
-        finally:
-            self._cleanup(path)
+    def test_permissions_preserved(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x / btrfs rw,subvol=root-old 0 0\n")
+        path.chmod(0o644)
+        update_fstab(str(path), "root-old", "root-new")
+        assert path.stat().st_mode & 0o7777 == 0o644
 
-    def test_home_subvol_untouched(self):
-        """update_fstab only modifies mountpoint=/ entries."""
-        path = self._write(
+    def test_home_subvol_untouched(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
             "UUID=x / btrfs rw,subvol=/root-old 0 0\n"
             "UUID=x /home btrfs rw,subvol=/home 0 0\n"
         )
-        try:
-            assert update_fstab(path, "root-old", "root-new")
-            text = Path(path).read_text()
-            assert "subvol=/root-new" in text
-            assert "subvol=/home" in text
-        finally:
-            self._cleanup(path)
+        assert update_fstab(str(path), "root-old", "root-new")
+        text = path.read_text()
+        assert "subvol=/root-new" in text
+        assert "subvol=/home" in text
 
-    def test_real_fstab(self):
-        path = self._write(
+    def test_real_fstab(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
             "# /etc/fstab: static file system information.\n"
             "#\n"
             "# <file system> <mount point> <type> <options> <dump> <pass>\n"
@@ -248,17 +215,12 @@ class TestUpdateFstab:
             "UUID=aaaa-bbbb /var/cache btrfs rw,noatime,compress=zstd:3,ssd,subvol=/cache 0 0\n"
             "tmpfs /tmp tmpfs defaults,noatime,mode=1777 0 0\n"
         )
-        try:
-            assert update_fstab(
-                path, "root-20250220-141710", "root-20250221-010551"
-            )
-            text = Path(path).read_text()
-            assert "subvol=/root-20250221-010551" in text
-            assert "subvol=/home" in text
-            assert "subvol=/log" in text
-            assert "subvol=/cache" in text
-            assert "root-20250220-141710" not in text
-            assert "ABCD-1234" in text
-            assert "tmpfs" in text
-        finally:
-            self._cleanup(path)
+        assert update_fstab(str(path), "root-20250220-141710", "root-20250221-010551")
+        text = path.read_text()
+        assert "subvol=/root-20250221-010551" in text
+        assert "subvol=/home" in text
+        assert "subvol=/log" in text
+        assert "subvol=/cache" in text
+        assert "root-20250220-141710" not in text
+        assert "ABCD-1234" in text
+        assert "tmpfs" in text
