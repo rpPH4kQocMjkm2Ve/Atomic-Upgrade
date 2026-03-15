@@ -54,6 +54,8 @@ fi
 # Allow AUR helpers — walk up the process tree via /proc
 
 if type -t is_child_of_aur_helper &>/dev/null && is_child_of_aur_helper; then
+    echo -e "\033[33mNOTE: AUR helper sysupgrade runs on live system (not atomic)\033[0m" >&2
+    echo -e "\033[33m      For atomic upgrades use: sudo atomic-upgrade\033[0m" >&2
     exit 0
 fi
 
