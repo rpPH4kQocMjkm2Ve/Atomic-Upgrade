@@ -233,12 +233,12 @@ To disable: `sudo rm /usr/local/bin/pacman`
 >
 > ```
 > subvolid=5 (top-level)
-> ├── root         → /
 > ├── home         → /home
 > ├── log          → /var/log
 > ├── cache        → /var/cache
-> └── root-*       → atomic-upgrade generations
-> ```
+> ├── root-<timestamp> → / (current generation)
+> ├── root-<timestamp> → previous generations
+> └── ...
 
 ### Dependencies
 
