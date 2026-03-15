@@ -223,7 +223,6 @@ sudo atomic-upgrade -- bash -c '/usr/bin/pacman -Syu && sudo -u YOUR_USER yay -S
 > **Note:** If you run `yay -Syu` directly (outside `atomic-upgrade`), the
 > upgrade applies to the live system and is **not atomic**. The next
 > `atomic-upgrade` will snapshot whatever state the live system is in.
-```
 
 ### Pacman wrapper
 
