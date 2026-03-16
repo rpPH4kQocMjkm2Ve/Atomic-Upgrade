@@ -199,6 +199,7 @@ assert_eq "MAPPER_NAME default" "root_crypt"             "$MAPPER_NAME"
 assert_eq "KERNEL_PKG default"  "linux"                  "$KERNEL_PKG"
 assert_eq "LOCK_FILE default"   "/var/lock/atomic-upgrade.lock" "$LOCK_FILE"
 assert_eq "SBCTL_SIGN default"  "0"                      "$SBCTL_SIGN"
+assert_eq "UPGRADE_GUARD default" "1"                    "$UPGRADE_GUARD"
 assert_match "KERNEL_PARAMS contains rw"     "rw"     "$KERNEL_PARAMS"
 assert_match "KERNEL_PARAMS contains pti=on" "pti=on" "$KERNEL_PARAMS"
 
@@ -303,6 +304,59 @@ else
     exec \"${REAL_STAT}\" \"\$@\"
 fi
 "
+
+
+# ── UPGRADE_GUARD config ─────────────────────────────────────
+
+section "UPGRADE_GUARD config"
+
+# Test: UPGRADE_GUARD=0 disables guard
+CONFIG_FILE="${TESTDIR}/guard_off.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+UPGRADE_GUARD=0
+EOF
+UPGRADE_GUARD=1
+load_config
+assert_eq "UPGRADE_GUARD=0 loaded" "0" "$UPGRADE_GUARD"
+
+# Test: UPGRADE_GUARD=1 explicitly enables guard
+CONFIG_FILE="${TESTDIR}/guard_on.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+UPGRADE_GUARD=1
+EOF
+UPGRADE_GUARD=0
+load_config
+assert_eq "UPGRADE_GUARD=1 loaded" "1" "$UPGRADE_GUARD"
+
+# Test: quoted UPGRADE_GUARD values
+CONFIG_FILE="${TESTDIR}/guard_quoted.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+UPGRADE_GUARD="0"
+EOF
+UPGRADE_GUARD=1
+load_config
+assert_eq "UPGRADE_GUARD quoted value" "0" "$UPGRADE_GUARD"
+
+# Test: UPGRADE_GUARD absent → default preserved
+CONFIG_FILE="${TESTDIR}/guard_absent.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+KEEP_GENERATIONS=3
+EOF
+UPGRADE_GUARD=1
+load_config
+assert_eq "UPGRADE_GUARD absent → stays 1" "1" "$UPGRADE_GUARD"
+
+# Test: UPGRADE_GUARD=0 with inline comment
+CONFIG_FILE="${TESTDIR}/guard_comment.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+UPGRADE_GUARD=0 # disable protection
+EOF
+UPGRADE_GUARD=1
+load_config
+assert_eq "UPGRADE_GUARD with inline comment" "0" "$UPGRADE_GUARD"
+
+# Restore
+UPGRADE_GUARD=1
 
 
 # ── get_current_subvol / get_current_subvol_raw ─────────────
@@ -673,6 +727,16 @@ assert_eq "evil HOME ignored"       "$_save_home" "$HOME"
 assert_eq "evil LD_PRELOAD ignored" "$_save_ld"   "${LD_PRELOAD:-}"
 assert_eq "whitelisted key still works" "42"       "$KEEP_GENERATIONS"
 KEEP_GENERATIONS=3
+
+# UPGRADE_GUARD must not be injectable via non-whitelisted names
+CONFIG_FILE="${TESTDIR}/evil_guard.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+UPGRADE_GUARD_OVERRIDE=0
+upgrade_guard=0
+EOF
+UPGRADE_GUARD=1
+load_config 2>/dev/null || true
+assert_eq "UPGRADE_GUARD not affected by similar names" "1" "$UPGRADE_GUARD"
 
 
 # ── KERNEL_PARAMS from config ───────────────────────────────

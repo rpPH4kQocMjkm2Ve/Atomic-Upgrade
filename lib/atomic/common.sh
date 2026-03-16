@@ -14,6 +14,7 @@ MAPPER_NAME="root_crypt"
 KERNEL_PKG="linux"
 LOCK_FILE="/var/lock/atomic-upgrade.lock"
 SBCTL_SIGN=0
+UPGRADE_GUARD=1
 # Kernel security parameters
 KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off"
 
@@ -33,7 +34,7 @@ load_config() {
     fi
 
     # Whitelist of allowed config keys
-    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN)
+    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD)
 
     while IFS='=' read -r key value; do
         # Strip whitespace
