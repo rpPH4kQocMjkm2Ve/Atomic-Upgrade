@@ -11,6 +11,11 @@ readonly LIBDIR="/usr/lib/atomic"
 _p=$(verify-lib "${LIBDIR}/common.sh" "$LIBDIR/" 2>/dev/null) && source "$_p"
 LOCK_FILE="${LOCK_FILE:-/var/lock/atomic-upgrade.lock}"
 
+# If guard is disabled in config, allow everything
+if [[ "${UPGRADE_GUARD:-1}" == "0" ]]; then
+    exit 0
+fi
+
 # If called during atomic-upgrade: verify lock is actually held
 if [[ "${ATOMIC_UPGRADE:-}" == "1" ]]; then
     [[ -f "$LOCK_FILE" ]] || exit 1
