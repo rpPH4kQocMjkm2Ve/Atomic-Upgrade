@@ -284,13 +284,18 @@ check_btrfs_space() {
 
     local free_percent=$((free_bytes * 100 / total_bytes))
     local free_gb=$((free_bytes / 1073741824))
+    local min_abs_gb=2  # absolute minimum regardless of percentage
 
-    if [[ $free_percent -lt $min_percent ]]; then
-        echo "ERROR: Low disk space: ${free_percent}% free (~${free_gb}GB), need ${min_percent}%" >&2
+    if [[ $free_percent -lt $min_percent && $free_gb -lt $min_abs_gb ]]; then
+        echo "ERROR: Low disk space: ${free_percent}% free (~${free_gb}GB), need ${min_percent}% or ${min_abs_gb}GB" >&2
         return 1
     fi
 
-    echo "   Disk space: ${free_percent}% free (~${free_gb}GB)"
+    if [[ $free_percent -lt $min_percent ]]; then
+        echo "   Disk space: ${free_percent}% free (~${free_gb}GB) — below ${min_percent}% but above ${min_abs_gb}GB minimum"
+    else
+        echo "   Disk space: ${free_percent}% free (~${free_gb}GB)"
+    fi
     return 0
 }
 
