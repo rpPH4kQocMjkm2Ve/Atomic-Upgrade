@@ -7,7 +7,6 @@ on:
       - 'lib/**'
       - 'extras/**'
       - 'tests/**'
-      - 'man/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
@@ -15,7 +14,6 @@ on:
       - 'lib/**'
       - 'extras/**'
       - 'tests/**'
-      - 'man/**'
       - '.github/workflows/ci.yml'
 
 jobs:
@@ -27,7 +25,6 @@ jobs:
       shell: ${{ steps.filter.outputs.shell }}
       python: ${{ steps.filter.outputs.python }}
       integration: ${{ steps.filter.outputs.integration }}
-      man: ${{ steps.filter.outputs.man }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -54,9 +51,6 @@ jobs:
               - 'lib/atomic/common.sh'
               - 'etc/atomic.conf'
               - 'tests/test_integration.sh'
-              - '.github/workflows/ci.yml'
-            man:
-              - 'man/*.md'
               - '.github/workflows/ci.yml'
 
   shellcheck:
@@ -109,21 +103,3 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: bash tests/test_integration.sh
-
-  man-check:
-    needs: changes
-    if: needs.changes.outputs.man == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install pandoc
-        run: sudo apt-get update && sudo apt-get install -y pandoc
-      - name: Regenerate man pages
-        run: make man
-      - name: Check groff files are up to date
-        run: |
-          if ! git diff --quiet man/; then
-            echo "::error::Man pages are out of date. Run 'make man' and commit the results."
-            git diff man/
-            exit 1
-          fi
