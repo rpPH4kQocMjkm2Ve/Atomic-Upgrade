@@ -1,4 +1,4 @@
-.PHONY: install uninstall reinstall install-conf
+.PHONY: install uninstall reinstall install-conf man clean
 
 PREFIX     = /usr
 SYSCONFDIR = /etc
@@ -8,10 +8,25 @@ pkgname    = atomic-upgrade
 BINDIR       = $(PREFIX)/bin
 LIBDIR       = $(PREFIX)/lib/atomic
 SHAREDIR     = $(PREFIX)/share
+MANDIR       = $(SHAREDIR)/man
 ZSH_COMPDIR  = $(SHAREDIR)/zsh/site-functions
 BASH_COMPDIR = $(SHAREDIR)/bash-completion/completions
 HOOKSDIR     = $(SHAREDIR)/libalpm/hooks
 LICENSEDIR   = $(SHAREDIR)/licenses/$(pkgname)
+
+MANPAGES = man/atomic-upgrade.8 man/atomic-gc.8 man/atomic.conf.5
+
+# Generate groff from markdown (requires pandoc, run locally)
+man: $(MANPAGES)
+
+man/%.8: man/%.8.md
+	pandoc -s -t man -o $@ $<
+
+man/%.5: man/%.5.md
+	pandoc -s -t man -o $@ $<
+
+clean:
+	rm -f $(MANPAGES)
 
 install:
 	install -Dm755 bin/atomic-upgrade     $(DESTDIR)$(BINDIR)/atomic-upgrade
@@ -37,6 +52,10 @@ install:
 
 	install -Dm755 extras/pacman-wrapper $(DESTDIR)$(PREFIX)/local/bin/pacman
 
+	install -Dm644 man/atomic-upgrade.8 $(DESTDIR)$(MANDIR)/man8/atomic-upgrade.8
+	install -Dm644 man/atomic-gc.8      $(DESTDIR)$(MANDIR)/man8/atomic-gc.8
+	install -Dm644 man/atomic.conf.5    $(DESTDIR)$(MANDIR)/man5/atomic.conf.5
+
 	install -Dm644 LICENSE $(DESTDIR)$(LICENSEDIR)/LICENSE
 
 	@if [ ! -f "$(DESTDIR)$(SYSCONFDIR)/atomic.conf" ]; then \
@@ -58,6 +77,9 @@ uninstall:
 	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-rebuild-uki
 	rm -f  $(DESTDIR)$(HOOKSDIR)/00-block-direct-upgrade.hook
 	rm -f  $(DESTDIR)$(PREFIX)/local/bin/pacman
+	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-upgrade.8
+	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-gc.8
+	rm -f  $(DESTDIR)$(MANDIR)/man5/atomic.conf.5
 	rm -rf $(DESTDIR)$(LICENSEDIR)/
 	@echo "Note: $(SYSCONFDIR)/atomic.conf preserved. Remove manually if needed."
 
