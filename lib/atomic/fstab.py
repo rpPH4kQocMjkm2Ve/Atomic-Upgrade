@@ -171,8 +171,16 @@ def _atomic_write(path: Path, entries: list) -> bool:
     finally:
         os.close(fd)
 
-    os.chown(tmp, original_stat.st_uid, original_stat.st_gid)
-    os.chmod(tmp, stat_mod.S_IMODE(original_stat.st_mode))
+    try:
+        os.chown(tmp, original_stat.st_uid, original_stat.st_gid)
+        os.chmod(tmp, stat_mod.S_IMODE(original_stat.st_mode))
+    except OSError as e:
+        # Clean up tmp file on permission errors
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(f"Failed to set permissions on {tmp}: {e}") from e
 
     tmp.replace(path)
 

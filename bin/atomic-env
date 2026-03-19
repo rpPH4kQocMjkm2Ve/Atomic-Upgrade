@@ -68,6 +68,12 @@ validate_env_name() {
         echo "ERROR: Name must not look like a timestamp (YYYYMMDD-HHMMSS)" >&2
         return 1
     fi
+    # Reject reserved suffixes to prevent subvolume name collisions
+    # env-NAME-home is the home subvol convention, env-NAME-pre-update is the backup convention
+    if [[ "$name" =~ -(home|pre-update)$ ]]; then
+        echo "ERROR: Name must not end with '-home' or '-pre-update' (reserved suffixes)" >&2
+        return 1
+    fi
     return 0
 }
 
@@ -273,6 +279,18 @@ do_create() {
         update_fstab_home "${mount_dir}/etc/fstab" "$hv" || {
             echo "WARN: Could not update /home in fstab. Environment will share host /home." >&2
         }
+    else
+        # Safety: if source system was booted from ephemeral with isolated home,
+        # the snapshot inherited that reference. Reset to default "home" subvol.
+        local inherited_home_sv
+        inherited_home_sv=$(awk '$2=="/home" && /subvol=/' "${mount_dir}/etc/fstab" | \
+            sed -n 's/.*subvol=\/?//; s/[, ].*//' | head -1) || true
+        if [[ "$inherited_home_sv" == ephemeral-home-* || "$inherited_home_sv" == env-*-home ]]; then
+            echo ":: Resetting /home (inherited isolated reference: ${inherited_home_sv})"
+            update_fstab_home "${mount_dir}/etc/fstab" "home" || {
+                echo "WARN: Could not reset /home in fstab. Check manually." >&2
+            }
+        fi
     fi
 
     # Step 6: run chroot command if provided
@@ -357,6 +375,15 @@ do_update() {
 
     # Create backup snapshot for rollback on failure
     local backup_sv="${sv}-pre-update"
+
+    # Safety: ensure backup name doesn't collide with another environment's root subvol
+    local backup_env_name="${name}-pre-update"
+    if [[ -f "${ESP}/EFI/Linux/arch-env-${backup_env_name}.efi" ]]; then
+        echo "ERROR: Backup subvolume name '${backup_sv}' collides with environment '${backup_env_name}'" >&2
+        echo "Rename one of the environments to resolve the conflict." >&2
+        exit 1
+    fi
+
     # Remove stale backup from previous failed update
     if [[ -d "${BTRFS_MOUNT}/${backup_sv}" ]]; then
         btrfs subvolume delete "${BTRFS_MOUNT}/${backup_sv}" 2>/dev/null || true
@@ -509,11 +536,17 @@ do_delete() {
     fi
 
     # Remove stale pre-update backup if exists
+    # Safety: verify it's actually a backup, not another environment's root subvol
     local backup_sv="${sv}-pre-update"
     if [[ -d "${BTRFS_MOUNT}/${backup_sv}" ]]; then
-        btrfs subvolume delete "${BTRFS_MOUNT}/${backup_sv}" 2>/dev/null && \
-            echo "   Removed stale backup ${backup_sv}" || \
-            echo "   WARN: Failed to delete backup ${backup_sv}" >&2
+        local backup_env_name="${name}-pre-update"
+        if [[ -f "${ESP}/EFI/Linux/arch-env-${backup_env_name}.efi" ]]; then
+            echo "   WARN: '${backup_sv}' appears to be env '${backup_env_name}', not a backup — skipping" >&2
+        else
+            btrfs subvolume delete "${BTRFS_MOUNT}/${backup_sv}" 2>/dev/null && \
+                echo "   Removed stale backup ${backup_sv}" || \
+                echo "   WARN: Failed to delete backup ${backup_sv}" >&2
+        fi
     fi
 
     # Reset boot default if this env was the default
@@ -671,15 +704,25 @@ do_list() {
         for sv_dir in "${BTRFS_MOUNT}"/env-*; do
             [[ -d "$sv_dir" ]] || continue
             local sv_name="${sv_dir##*/}"
-            # Skip home subvolumes (only if their parent env root exists)
+            # Skip home subvolumes — but only if they're actually home subvols,
+            # not root subvols of envs named "*-home"
             if [[ "$sv_name" == *-home ]]; then
                 local potential_root="${sv_name%-home}"
-                [[ -d "${BTRFS_MOUNT}/${potential_root}" ]] && continue
+                # It's a home subvol if the parent root exists AND it's not itself a known env
+                local self_env_name="${sv_name#env-}"
+                if [[ -d "${BTRFS_MOUNT}/${potential_root}" ]] && \
+                   [[ ! -f "${ESP}/EFI/Linux/arch-env-${self_env_name}.efi" ]]; then
+                    continue
+                fi
             fi
-            # Skip pre-update backups (only if their parent env root exists)
+            # Skip pre-update backups — same disambiguation
             if [[ "$sv_name" == *-pre-update ]]; then
                 local potential_root="${sv_name%-pre-update}"
-                [[ -d "${BTRFS_MOUNT}/${potential_root}" ]] && continue
+                local self_env_name="${sv_name#env-}"
+                if [[ -d "${BTRFS_MOUNT}/${potential_root}" ]] && \
+                   [[ ! -f "${ESP}/EFI/Linux/arch-env-${self_env_name}.efi" ]]; then
+                    continue
+                fi
             fi
             # env-NAME → NAME
             local env_name="${sv_name#env-}"

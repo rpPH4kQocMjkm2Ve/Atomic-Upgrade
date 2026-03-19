@@ -652,6 +652,14 @@ garbage_collect() {
             local ehome_name="${d##*/}"
             # env-NAME-home → env-NAME
             local env_sv="${ehome_name%-home}"
+
+            # Safety: skip if this is actually a root subvol of an environment
+            # named "...-home" (e.g. env-my-app-home is root of env "my-app-home")
+            local potential_env_name="${ehome_name#env-}"
+            if [[ -f "${ESP}/EFI/Linux/arch-env-${potential_env_name}.efi" ]]; then
+                continue
+            fi
+
             if [[ ! -d "${BTRFS_MOUNT}/${env_sv}" ]]; then
                 echo "   Orphan env home: ${ehome_name}"
                 if [[ "$dry_run" -eq 0 ]]; then
@@ -665,7 +673,22 @@ garbage_collect() {
         for d in "${BTRFS_MOUNT}"/env-*-pre-update; do
             [[ -d "$d" ]] || continue
             local backup_name="${d##*/}"
-            echo "   Orphan update backup: ${backup_name}"
+
+            # Safety: skip if this is actually a root subvol of an environment
+            # named "...-pre-update" (e.g. env-test-pre-update is root of env "test-pre-update")
+            local potential_env_name="${backup_name#env-}"
+            if [[ -f "${ESP}/EFI/Linux/arch-env-${potential_env_name}.efi" ]]; then
+                continue
+            fi
+
+            # env-NAME-pre-update → env-NAME; only orphan if parent env still exists
+            # but the backup was left behind (crashed update)
+            local parent_sv="${backup_name%-pre-update}"
+            if [[ -d "${BTRFS_MOUNT}/${parent_sv}" ]]; then
+                echo "   Stale update backup: ${backup_name}"
+            else
+                echo "   Orphan update backup: ${backup_name}"
+            fi
             if [[ "$dry_run" -eq 0 ]]; then
                 btrfs subvolume delete "$d" 2>/dev/null ||
                     echo "   WARN: Failed to delete orphan ${backup_name}" >&2

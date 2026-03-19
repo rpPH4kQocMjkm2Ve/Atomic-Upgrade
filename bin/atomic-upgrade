@@ -288,6 +288,21 @@ if ! grep -Eq "subvol=/?${NEW_SUBVOL}" "${NEW_ROOT}/etc/fstab"; then
     exit 1
 fi
 
+# Safety: if this is a non-ephemeral upgrade but fstab /home points to an
+# ephemeral home subvol (inherited from booting an ephemeral generation),
+# reset /home to the default "home" subvolume to prevent dangling reference
+# after GC deletes the ephemeral home.
+if [[ $EPHEMERAL -eq 0 ]]; then
+    _current_home_sv=$(awk '$2=="/home" && /subvol=/' "${NEW_ROOT}/etc/fstab" | \
+        sed -n 's/.*subvol=\/?//; s/[, ].*//' | head -1) || true
+    if [[ "$_current_home_sv" == ephemeral-home-* ]]; then
+        echo ":: Resetting /home (inherited ephemeral reference: ${_current_home_sv})"
+        update_fstab_home "${NEW_ROOT}/etc/fstab" "home" || {
+            echo "WARN: Could not reset /home in fstab. Check manually." >&2
+        }
+    fi
+fi
+
 # Ephemeral: update /home in fstab (only if home was created)
 if [[ $EPHEMERAL -eq 1 && $EPHEMERAL_NO_HOME -eq 0 ]]; then
     echo ":: Updating fstab (ephemeral home)..."
