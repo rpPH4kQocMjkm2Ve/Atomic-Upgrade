@@ -97,6 +97,12 @@ if [[ $EPHEMERAL -eq 0 ]]; then
     fi
 fi
 
+# --copy-files is meaningless with --no-home
+if [[ $EPHEMERAL_NO_HOME -eq 1 && -n "$EPHEMERAL_COPY_FILES" ]]; then
+    echo "ERROR: --copy-files conflicts with --no-home" >&2
+    exit 1
+fi
+
 # Validate custom tag
 if [[ -n "$CUSTOM_TAG" ]]; then
     if [[ ! "$CUSTOM_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -294,7 +300,7 @@ fi
 # after GC deletes the ephemeral home.
 if [[ $EPHEMERAL -eq 0 ]]; then
     _current_home_sv=$(awk '$2=="/home" && /subvol=/' "${NEW_ROOT}/etc/fstab" | \
-        sed -n 's/.*subvol=\/?//; s/[, ].*//' | head -1) || true
+        sed -E 's/.*subvol=\/?//; s/[, ].*//' | head -1) || true
     if [[ "$_current_home_sv" == ephemeral-home-* ]]; then
         echo ":: Resetting /home (inherited ephemeral reference: ${_current_home_sv})"
         update_fstab_home "${NEW_ROOT}/etc/fstab" "home" || {
