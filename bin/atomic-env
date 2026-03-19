@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-VERSION="0.0.2"
+VERSION="0.0.3"
 readonly LIBDIR="/usr/lib/atomic"
 _src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
 
@@ -81,6 +81,7 @@ ENV_CREATED=0
 ENV_HOME_CREATED=0
 CLEANUP_ENV_NAME=""
 CLEANUP_MOUNT=""
+UPDATE_BACKUP_SV=""
 
 cleanup_env() {
     local exit_code=$?
@@ -95,7 +96,7 @@ cleanup_env() {
         fi
     fi
 
-    # On failure: remove partially created env
+    # On failure during create: remove partially created env
     if [[ $exit_code -ne 0 && -n "$CLEANUP_ENV_NAME" ]]; then
         if ensure_btrfs_mounted 2>/dev/null; then
             local sv hv
@@ -111,6 +112,22 @@ cleanup_env() {
             fi
         fi
         rm -f "$(env_uki_path "$CLEANUP_ENV_NAME")" 2>/dev/null
+    fi
+
+    # On failure during update: restore from backup snapshot
+    if [[ $exit_code -ne 0 && -n "$UPDATE_BACKUP_SV" ]]; then
+        if ensure_btrfs_mounted 2>/dev/null; then
+            local orig_sv="${UPDATE_BACKUP_SV%-pre-update}"
+            if [[ -d "${BTRFS_MOUNT}/${UPDATE_BACKUP_SV}" ]]; then
+                echo ":: Rolling back update: restoring from ${UPDATE_BACKUP_SV}" >&2
+                if [[ -d "${BTRFS_MOUNT}/${orig_sv}" ]]; then
+                    btrfs subvolume delete "${BTRFS_MOUNT}/${orig_sv}" 2>/dev/null || true
+                fi
+                btrfs subvolume snapshot "${BTRFS_MOUNT}/${UPDATE_BACKUP_SV}" \
+                    "${BTRFS_MOUNT}/${orig_sv}" 2>/dev/null || true
+                btrfs subvolume delete "${BTRFS_MOUNT}/${UPDATE_BACKUP_SV}" 2>/dev/null || true
+            fi
+        fi
     fi
 
     mountpoint -q "$BTRFS_MOUNT" 2>/dev/null && umount "$BTRFS_MOUNT"
@@ -310,7 +327,29 @@ do_update() {
         exit 1
     fi
 
+    # Refuse to update currently booted environment
+    local current_subvol
+    current_subvol=$(get_current_subvol)
+    if [[ "$sv" == "$current_subvol" ]]; then
+        echo "ERROR: Cannot update currently booted environment '${name}'" >&2
+        echo "Boot into a different environment or the main system first." >&2
+        exit 1
+    fi
+
     echo ":: Updating environment '${name}'..."
+
+    # Create backup snapshot for rollback on failure
+    local backup_sv="${sv}-pre-update"
+    # Remove stale backup from previous failed update
+    if [[ -d "${BTRFS_MOUNT}/${backup_sv}" ]]; then
+        btrfs subvolume delete "${BTRFS_MOUNT}/${backup_sv}" 2>/dev/null || true
+    fi
+    echo ":: Creating backup snapshot..."
+    btrfs subvolume snapshot "${BTRFS_MOUNT}/${sv}" "${BTRFS_MOUNT}/${backup_sv}" || {
+        echo "ERROR: Failed to create backup snapshot" >&2
+        exit 1
+    }
+    UPDATE_BACKUP_SV="$backup_sv"
 
     local mount_dir="${NEW_ROOT}"
     mkdir -p "$mount_dir"
@@ -336,14 +375,16 @@ do_update() {
     }
 
     echo ":: Running: ${chroot_cmd[*]}"
-    local chroot_failed=0
     arch-chroot "$mount_dir" "${chroot_cmd[@]}" || {
-        echo "WARN: Chroot command failed: ${chroot_cmd[*]}" >&2
-        chroot_failed=1
+        echo "ERROR: Chroot command failed: ${chroot_cmd[*]}" >&2
+        echo ":: Rolling back to pre-update state..." >&2
+        umount -R "$mount_dir" 2>/dev/null || umount -Rl "$mount_dir" 2>/dev/null
+        CLEANUP_MOUNT=""
+        # Rollback is handled by cleanup_env via UPDATE_BACKUP_SV
+        exit 1
     }
 
-    # Rebuild UKI regardless — if chroot partially succeeded, the kernel
-    # inside the subvolume may have changed. The UKI must match what's on disk.
+    # Rebuild UKI after successful chroot
     echo ":: Rebuilding UKI..."
     local uki_result
     uki_result=$(build_uki "env-${name}" "$mount_dir" "$sv") || {
@@ -362,11 +403,10 @@ do_update() {
     umount -R "$mount_dir" 2>/dev/null || umount -Rl "$mount_dir" 2>/dev/null
     CLEANUP_MOUNT=""
 
-    if [[ $chroot_failed -eq 1 ]]; then
-        echo "Environment '${name}' UKI rebuilt, but chroot command had errors."
-        echo "Review the output above and consider re-running the update."
-        exit 1
-    fi
+    # Success — remove backup snapshot
+    echo ":: Removing backup snapshot..."
+    btrfs subvolume delete "${BTRFS_MOUNT}/${backup_sv}" 2>/dev/null || true
+    UPDATE_BACKUP_SV=""
 
     echo "Environment '${name}' updated."
 }
@@ -450,11 +490,19 @@ do_delete() {
             echo "   WARN: Failed to delete home subvolume ${hv}" >&2
     fi
 
+    # Remove stale pre-update backup if exists
+    local backup_sv="${sv}-pre-update"
+    if [[ -d "${BTRFS_MOUNT}/${backup_sv}" ]]; then
+        btrfs subvolume delete "${BTRFS_MOUNT}/${backup_sv}" 2>/dev/null && \
+            echo "   Removed stale backup ${backup_sv}" || \
+            echo "   WARN: Failed to delete backup ${backup_sv}" >&2
+    fi
+
     # Reset boot default if this env was the default
-    # Use bootctl status which has more stable output than bootctl list
     if command -v bootctl >/dev/null 2>&1; then
         local default_entry
-        default_entry=$(bootctl status 2>/dev/null | sed -n 's/.*default:.*arch-env-\([^.]*\)\.efi.*/\1/p' | head -1) || true
+        default_entry=$(bootctl list 2>/dev/null | \
+            sed -n 's/^[[:space:]]*id:[[:space:]]*arch-env-\([^.]*\)\.efi.*/\1/p' | head -1) || true
         if [[ "$default_entry" == "$name" ]]; then
             echo "   Resetting boot default (was set to this environment)"
             bootctl set-default "" 2>/dev/null || true
@@ -518,10 +566,23 @@ do_boot() {
         exit 1
     fi
 
+    # Verify subvolume exists (UKI without subvolume = unbootable)
+    if [[ $EUID -eq 0 ]]; then
+        if ensure_btrfs_mounted 2>/dev/null; then
+            local sv
+            sv=$(env_subvol "$default_name")
+            if [[ ! -d "${BTRFS_MOUNT}/${sv}" ]]; then
+                echo "ERROR: Subvolume '${sv}' not found. UKI exists but environment is incomplete." >&2
+                echo "Recreate with: atomic-env create ${default_name}" >&2
+                exit 1
+            fi
+        fi
+    fi
+
     acquire_lock
 
-    # UKI filename relative to ESP for bootctl
-    local uki_entry="EFI/Linux/arch-env-${default_name}.efi"
+    # UKI filename for bootctl (Type #2 entries use filename, not path)
+    local uki_entry="arch-env-${default_name}.efi"
 
     echo ":: Setting default boot to '${default_name}'..."
     bootctl set-default "$uki_entry" || {
@@ -538,6 +599,14 @@ do_list() {
     current_subvol=$(get_current_subvol 2>/dev/null) || current_subvol=""
 
     local found=0
+    local can_check_btrfs=0
+
+    # Try to mount btrfs to check home type
+    if [[ $EUID -eq 0 ]]; then
+        if ensure_btrfs_mounted 2>/dev/null; then
+            can_check_btrfs=1
+        fi
+    fi
 
     printf "%-20s %-10s %-40s %s\n" "ENVIRONMENT" "HOME" "UKI" "STATUS"
     printf "%-20s %-10s %-40s %s\n" "───────────" "────" "───" "──────"
@@ -560,11 +629,12 @@ do_list() {
         fi
 
         # Check home type
-        local home_type="shared"
-        # Try to check if the home subvolume exists
-        if ensure_btrfs_mounted 2>/dev/null; then
+        local home_type="unknown"
+        if [[ $can_check_btrfs -eq 1 ]]; then
             if [[ -d "${BTRFS_MOUNT}/${hv}" ]]; then
                 home_type="isolated"
+            else
+                home_type="shared"
             fi
         fi
 
@@ -575,6 +645,10 @@ do_list() {
     if [[ $found -eq 0 ]]; then
         echo "No environments found."
         echo "Create one with: atomic-env create NAME [-- COMMAND...]"
+    fi
+
+    if [[ $can_check_btrfs -eq 0 && $found -gt 0 ]]; then
+        echo "(Run as root to see home type details)" >&2
     fi
 }
 
