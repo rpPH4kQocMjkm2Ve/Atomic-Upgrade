@@ -268,7 +268,7 @@ populate_home_skeleton() {
     if [[ -n "$copy_files" ]]; then
         echo "   Home skeleton created with files: ${copy_files}"
     else
-        echo "   Home skeleton created from current /home"
+        echo "   Home skeleton created (empty user directories)"
     fi
 }
 
