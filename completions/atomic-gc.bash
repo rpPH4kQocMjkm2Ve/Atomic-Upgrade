@@ -36,6 +36,8 @@ _atomic_gc() {
                     name="${f##*/}"
                     name="${name#arch-}"
                     name="${name%.efi}"
+                    # Skip env-* entries — managed by atomic-env
+                    [[ "$name" == env-* ]] && continue
                     gens+=("$name")
                 done
                 COMPREPLY=( $(compgen -W "${gens[*]}" -- "$cur") )

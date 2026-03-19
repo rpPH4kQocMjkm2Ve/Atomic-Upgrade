@@ -2,7 +2,7 @@
 # /usr/lib/atomic/common.sh
 #
 # Shared functions and configuration for the atomic-upgrade system.
-# Sourced by: atomic-upgrade, atomic-gc, atomic-rebuild-uki, atomic-guard
+# Sourced by: atomic-upgrade, atomic-gc, atomic-rebuild-uki, atomic-guard, atomic-env
 
 # ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 
@@ -179,6 +179,56 @@ verify_uki() {
 
 update_fstab() {
     python3 /usr/lib/atomic/fstab.py "$@"
+}
+
+# ── fstab /home update (sed-based) ─────────────────────────────────
+# Updates the /home mount entry's subvol= to point to a new subvolume.
+# Used by ephemeral generations and named environments.
+#
+# Args: $1 = fstab path, $2 = new home subvolume name
+
+update_fstab_home() {
+    local fstab_path="$1"
+    local new_home_subvol="$2"
+
+    [[ -f "$fstab_path" ]] || {
+        echo "ERROR: fstab not found: ${fstab_path}" >&2
+        return 1
+    }
+
+    # Normalize: strip leading slashes from the new name
+    new_home_subvol="${new_home_subvol#/}"
+
+    # Check if there's a /home entry with subvol= at all
+    if ! grep -v '^\s*#' "$fstab_path" | grep -qE '[[:space:]]/home[[:space:]].*subvol='; then
+        echo "WARN: No /home entry with subvol= found in fstab" >&2
+        echo "WARN: Environment will share the host /home directory" >&2
+        return 1
+    fi
+
+    # Create backup
+    cp -a "$fstab_path" "${fstab_path}.home-bak"
+
+    # Replace subvol= value on lines where mountpoint is /home
+    # The regex:
+    #   - Skips comment lines (^\s*#)
+    #   - Matches lines with /home as a whitespace-delimited field
+    #   - Replaces subvol=/anything with subvol=/new_value
+    #   - Handles both subvol=/path and subvol=path (normalizes to /path)
+    sed -i -E \
+        '/^\s*#/!{ /[[:space:]]\/home[[:space:]]/s|(subvol=)/?[^,[:space:]]+|\1/'"${new_home_subvol}"'| }' \
+        "$fstab_path"
+
+    # Verify the change took effect
+    if grep -v '^\s*#' "$fstab_path" | grep -qE "[[:space:]]/home[[:space:]].*subvol=/?${new_home_subvol}"; then
+        rm -f "${fstab_path}.home-bak"
+        return 0
+    else
+        echo "ERROR: fstab /home update verification failed, restoring backup" >&2
+        cp -a "${fstab_path}.home-bak" "$fstab_path"
+        rm -f "${fstab_path}.home-bak"
+        return 1
+    fi
 }
 
 # ── Root device detection ───────────────────────────────────────────
@@ -435,11 +485,36 @@ garbage_collect() {
 
     [[ -z "$generations" ]] && { echo "   No generations found"; return 0; }
 
+    # Phase 1: auto-delete stale ephemeral generations
+    for gen_id in $generations; do
+        [[ "$gen_id" == env-* ]] && continue
+
+        local subvol_name="root-${gen_id}"
+        [[ "$subvol_name" == "$current_subvol" ]] && continue
+
+        if [[ -f "${BTRFS_MOUNT}/${subvol_name}/.atomic-ephemeral" ]]; then
+            echo "   Ephemeral: ${gen_id} (auto-removing)"
+            if [[ "$dry_run" -eq 0 ]]; then
+                delete_generation "$gen_id" 0 "$current_subvol"
+            else
+                echo "   Would delete ephemeral: ${gen_id}"
+            fi
+        fi
+    done
+
+    # Re-read generations after ephemeral cleanup
+    generations=$(list_generations)
+    [[ -z "$generations" ]] && { echo "   No generations remaining"; return 0; }
+
+    # Phase 2: standard keep/delete cycle for regular generations
     local -a to_keep=()
     local -a to_delete=()
     local count=0
 
     for gen_id in $generations; do
+        # Skip env-* entries entirely — they're managed by atomic-env
+        [[ "$gen_id" == env-* ]] && continue
+
         local subvol_name="root-${gen_id}"
 
         if [[ "$subvol_name" == "$current_subvol" ]]; then
@@ -472,9 +547,11 @@ garbage_collect() {
         fi
     fi
 
+    # Phase 3: orphan sweep
     if ! mountpoint -q "$ESP" 2>/dev/null; then
         echo "   WARN: ESP not mounted, skipping orphan sweep" >&2
     else
+        # Orphan subvolumes (no UKI)
         for d in "${BTRFS_MOUNT}"/root-*; do
             [[ -d "$d" ]] || continue
             local name="${d##*/}"
@@ -490,15 +567,32 @@ garbage_collect() {
             fi
         done
 
+        # Orphan UKIs (no subvolume) — skip env-* UKIs
         for uki in "${ESP}/EFI/Linux/arch-"*.efi; do
             [[ -e "$uki" ]] || continue
             local uki_name="${uki##*/}"
             uki_name="${uki_name#arch-}"; uki_name="${uki_name%.efi}"
+            # Skip env-* UKIs
+            [[ "$uki_name" == env-* ]] && continue
             [[ "root-${uki_name}" == "$current_subvol" ]] && continue
             [[ "$uki_name" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
             if [[ ! -d "${BTRFS_MOUNT}/root-${uki_name}" ]]; then
                 echo "   Orphan UKI: ${uki_name} (no subvolume)"
                 [[ "$dry_run" -eq 0 ]] && rm -f "$uki"
+            fi
+        done
+
+        # Orphan ephemeral home subvolumes (their parent generation was deleted)
+        for d in "${BTRFS_MOUNT}"/ephemeral-home-*; do
+            [[ -d "$d" ]] || continue
+            local ehome_name="${d##*/}"
+            local gen="${ehome_name#ephemeral-home-}"
+            if [[ ! -d "${BTRFS_MOUNT}/root-${gen}" ]]; then
+                echo "   Orphan ephemeral home: ${ehome_name}"
+                if [[ "$dry_run" -eq 0 ]]; then
+                    btrfs subvolume delete "$d" 2>/dev/null ||
+                        echo "   WARN: Failed to delete orphan ${ehome_name}" >&2
+                fi
             fi
         done
     fi
@@ -519,6 +613,12 @@ delete_generation() {
         }
     fi
 
+    # Protect named environments from accidental deletion via atomic-gc
+    if [[ "$gen_id" == env-* ]]; then
+        echo "   REFUSE: '${gen_id}' is a named environment. Use 'atomic-env delete' instead." >&2
+        return 1
+    fi
+
     if [[ "root-${gen_id}" == "$current_subvol" ]]; then
         echo "   REFUSE: ${gen_id} is current" >&2
         return 1
@@ -532,6 +632,13 @@ delete_generation() {
     echo "   Deleting: ${gen_id}"
     rm -f "${ESP}/EFI/Linux/arch-${gen_id}.efi"
     if [[ -d "${BTRFS_MOUNT}/root-${gen_id}" ]]; then
+        # Clean up ephemeral home if it exists
+        local ehome="ephemeral-home-${gen_id}"
+        if [[ -d "${BTRFS_MOUNT}/${ehome}" ]]; then
+            btrfs subvolume delete "${BTRFS_MOUNT}/${ehome}" 2>/dev/null || \
+                echo "   WARN: Failed to delete ephemeral home ${ehome}" >&2
+        fi
+
         btrfs subvolume delete "${BTRFS_MOUNT}/root-${gen_id}" 2>/dev/null || {
             echo "   WARN: Failed to delete subvolume root-${gen_id}" >&2
         }

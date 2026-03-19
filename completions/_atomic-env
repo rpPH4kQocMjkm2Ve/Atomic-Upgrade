@@ -1,0 +1,67 @@
+#compdef atomic-env
+
+_atomic-env() {
+    local -a commands=(
+        'create:Create a new named environment'
+        'update:Update an existing environment'
+        'delete:Delete an environment'
+        'boot:Set boot target'
+        'list:List all environments'
+    )
+
+    _arguments -C \
+        '-h[Show help]' \
+        '--help[Show help]' \
+        '-V[Show version]' \
+        '--version[Show version]' \
+        '1:command:->cmd' \
+        '*::arg:->args'
+
+    case "$state" in
+        cmd)
+            _describe -t commands 'atomic-env command' commands
+            ;;
+        args)
+            case "$words[1]" in
+                create)
+                    _arguments \
+                        '1:environment name:' \
+                        '--[Command separator]:' \
+                        '*:command:'
+                    ;;
+                update)
+                    _arguments \
+                        "1:environment name:($(_atomic_env_names))" \
+                        '--[Command separator]:' \
+                        '*:command:'
+                    ;;
+                delete)
+                    _arguments \
+                        '-y[Skip confirmation]' \
+                        '--yes[Skip confirmation]' \
+                        "1:environment name:($(_atomic_env_names))"
+                    ;;
+                boot)
+                    _arguments \
+                        "--default[Set default boot]:environment name:($(_atomic_env_names))" \
+                        '--reset[Reset boot default]'
+                    ;;
+                list) ;;
+            esac
+            ;;
+    esac
+}
+
+_atomic_env_names() {
+    local esp="${ESP:-/efi}"
+    local -a names=()
+    for f in "${esp}"/EFI/Linux/arch-env-*.efi(N); do
+        local n="${f##*/}"
+        n="${n#arch-env-}"
+        n="${n%.efi}"
+        names+=("$n")
+    done
+    echo "${names[@]}"
+}
+
+_atomic-env "$@"

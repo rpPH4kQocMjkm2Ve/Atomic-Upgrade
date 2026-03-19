@@ -29,6 +29,8 @@ _atomic_gc_gens() {
         name="${f:t}"
         name="${name#arch-}"
         name="${name%.efi}"
+        # Skip env-* entries — managed by atomic-env
+        [[ "$name" == env-* ]] && continue
         gens+=("$name")
     done
 

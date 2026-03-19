@@ -22,6 +22,11 @@ Options:
     -y, --yes        Skip confirmation (rm only)
     -h, --help       Show this help
 
+Notes:
+    Named environments (env-*) are skipped during GC and cannot be deleted
+    with 'atomic-gc rm'. Use 'atomic-env delete' instead.
+    Ephemeral generations are automatically removed during GC.
+
 EOF
     exit 0
 }
@@ -68,10 +73,20 @@ case "$COMMAND" in
         generations=$(list_generations)
         [[ -z "$generations" ]] && { echo "No generations found"; exit 0; }
         for gen_id in $generations; do
-            if [[ "root-${gen_id}" == "$current_subvol" ]]; then
-                echo "  * ${gen_id}  (current)"
+            label=""
+            subvol_name=""
+
+            if [[ "$gen_id" == env-* ]]; then
+                subvol_name="$gen_id"
+                label="[env]"
             else
-                echo "    ${gen_id}"
+                subvol_name="root-${gen_id}"
+            fi
+
+            if [[ "$subvol_name" == "$current_subvol" ]]; then
+                echo "  * ${gen_id}  (current)${label:+ $label}"
+            else
+                echo "    ${gen_id}${label:+ $label}"
             fi
         done
         ;;
@@ -79,6 +94,15 @@ case "$COMMAND" in
         acquire_lock
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation(s) to delete" >&2; exit 1; }
         ensure_btrfs_mounted || exit 1
+
+        # Reject env-* targets
+        for gen_id in "${ARGS[@]}"; do
+            if [[ "$gen_id" == env-* ]]; then
+                echo "ERROR: '${gen_id}' is a named environment. Use 'atomic-env delete' instead." >&2
+                exit 1
+            fi
+        done
+
         # Validate all targets exist before deleting any
         for gen_id in "${ARGS[@]}"; do
             if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]] && \

@@ -1,0 +1,15 @@
+#compdef atomic-upgrade
+
+_atomic-upgrade() {
+    _arguments \
+        '(- *)'{-h,--help}'[Show help]' \
+        '(- *)'{-V,--version}'[Show version]' \
+        '(-n --dry-run)'{-n,--dry-run}'[Show what would be done]' \
+        '(-t --tag)'{-t,--tag}'[Custom tag for snapshot]:tag:' \
+        '--no-gc[Skip garbage collection]' \
+        '--ephemeral[Create one-shot generation (auto-cleaned on next GC)]' \
+        '(-)--[Command separator]' \
+        '*:command:_command_names'
+}
+
+_atomic-upgrade "$@"

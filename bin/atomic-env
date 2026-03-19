@@ -1,0 +1,579 @@
+#!/bin/bash
+# /usr/bin/atomic-env
+#
+# Named environments for atomic-upgrade system.
+# Manages isolated system snapshots with separate /home subvolumes.
+
+set -euo pipefail
+
+VERSION="0.0.1"
+readonly LIBDIR="/usr/lib/atomic"
+_src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
+
+_src "${LIBDIR}/common.sh"
+
+export ATOMIC_UPGRADE=1
+
+show_help() {
+    cat << 'EOF'
+atomic-env - Named environment management
+
+Usage:
+    atomic-env create NAME [-- COMMAND...]   Create environment from current root
+    atomic-env update NAME [-- COMMAND...]   Update existing environment
+    atomic-env delete [-y] NAME              Delete environment
+    atomic-env boot [--default NAME|--reset] Set boot target
+    atomic-env list                          List environments
+
+Examples:
+    atomic-env create kde -- pacman -S plasma-meta
+    atomic-env create minimal
+    atomic-env update kde -- pacman -Syu
+    atomic-env delete kde
+    atomic-env boot --default kde
+    atomic-env boot --reset
+    atomic-env list
+
+Environment names must be alphanumeric (with hyphens/underscores), max 48 chars.
+Each environment gets its own /home subvolume for isolation.
+EOF
+    exit 0
+}
+
+# ── Validation ───────────────────────────────────────────────────────
+
+validate_env_name() {
+    local name="$1"
+    if [[ -z "$name" ]]; then
+        echo "ERROR: Environment name required" >&2
+        return 1
+    fi
+    if [[ ! "$name" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]]; then
+        echo "ERROR: Invalid name '${name}'. Use alphanumeric, hyphens, underscores (must start with alphanumeric)." >&2
+        return 1
+    fi
+    if [[ ${#name} -gt 48 ]]; then
+        echo "ERROR: Name too long (max 48 characters)" >&2
+        return 1
+    fi
+    # Reject names that could collide with timestamp generations
+    if [[ "$name" =~ ^[0-9]{8}-[0-9]{6} ]]; then
+        echo "ERROR: Name must not look like a timestamp (YYYYMMDD-HHMMSS)" >&2
+        return 1
+    fi
+    return 0
+}
+
+env_subvol() { echo "env-$1"; }
+env_home_subvol() { echo "env-$1-home"; }
+env_uki_path() { echo "${ESP}/EFI/Linux/arch-env-$1.efi"; }
+
+# ── Cleanup state ────────────────────────────────────────────────────
+
+ENV_CREATED=0
+ENV_HOME_CREATED=0
+CLEANUP_ENV_NAME=""
+CLEANUP_MOUNT=""
+
+cleanup_env() {
+    local exit_code=$?
+    set +e
+
+    # Unmount chroot bind mounts
+    if [[ -n "$CLEANUP_MOUNT" ]] && mountpoint -q "$CLEANUP_MOUNT" 2>/dev/null; then
+        umount -R "$CLEANUP_MOUNT" 2>/dev/null
+        if mountpoint -q "$CLEANUP_MOUNT" 2>/dev/null; then
+            umount -Rl "$CLEANUP_MOUNT" 2>/dev/null
+            sleep 1
+        fi
+    fi
+
+    # On failure: remove partially created env
+    if [[ $exit_code -ne 0 && -n "$CLEANUP_ENV_NAME" ]]; then
+        if ensure_btrfs_mounted 2>/dev/null; then
+            local sv hv
+            sv=$(env_subvol "$CLEANUP_ENV_NAME")
+            hv=$(env_home_subvol "$CLEANUP_ENV_NAME")
+            if [[ $ENV_CREATED -eq 1 && -d "${BTRFS_MOUNT}/${sv}" ]]; then
+                echo ":: Rolling back: removing ${sv}" >&2
+                btrfs subvolume delete "${BTRFS_MOUNT}/${sv}" 2>/dev/null || true
+            fi
+            if [[ $ENV_HOME_CREATED -eq 1 && -d "${BTRFS_MOUNT}/${hv}" ]]; then
+                echo ":: Rolling back: removing ${hv}" >&2
+                btrfs subvolume delete "${BTRFS_MOUNT}/${hv}" 2>/dev/null || true
+            fi
+        fi
+        rm -f "$(env_uki_path "$CLEANUP_ENV_NAME")" 2>/dev/null
+    fi
+
+    mountpoint -q "$BTRFS_MOUNT" 2>/dev/null && umount "$BTRFS_MOUNT"
+    [[ -n "${LOCK_FD:-}" ]] && exec {LOCK_FD}>&- 2>/dev/null
+
+    return $exit_code
+}
+trap cleanup_env EXIT
+
+# ── Create ───────────────────────────────────────────────────────────
+
+do_create() {
+    local name="$1"; shift
+    validate_env_name "$name" || exit 1
+
+    [[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
+    validate_config || exit 1
+    check_dependencies || exit 1
+
+    local chroot_cmd=()
+    # Parse remaining args: everything after -- is the chroot command
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --) shift; chroot_cmd=("$@"); break ;;
+            *) echo "ERROR: Unexpected argument: $1. Use -- before commands." >&2; exit 1 ;;
+        esac
+    done
+
+    local sv hv uki_path
+    sv=$(env_subvol "$name")
+    hv=$(env_home_subvol "$name")
+    uki_path=$(env_uki_path "$name")
+
+    acquire_lock
+
+    CLEANUP_ENV_NAME="$name"
+
+    ensure_btrfs_mounted || exit 1
+
+    # Check environment doesn't already exist
+    if [[ -d "${BTRFS_MOUNT}/${sv}" ]]; then
+        echo "ERROR: Environment already exists: ${name}" >&2
+        echo "Use 'atomic-env update ${name}' to modify, or delete first." >&2
+        CLEANUP_ENV_NAME=""
+        exit 1
+    fi
+
+    local current_subvol
+    current_subvol=$(get_current_subvol)
+    [[ -n "$current_subvol" ]] || { echo "ERROR: Cannot detect current subvolume" >&2; exit 1; }
+
+    echo ":: Creating environment '${name}' from ${current_subvol}..."
+
+    # Check space
+    check_btrfs_space "$BTRFS_MOUNT" 10 || exit 1
+    check_esp_space 250 || exit 1
+
+    # Step 1: snapshot root
+    echo ":: Snapshotting root..."
+    btrfs subvolume snapshot "${BTRFS_MOUNT}/${current_subvol}" \
+        "${BTRFS_MOUNT}/${sv}" || {
+        echo "ERROR: Failed to create snapshot" >&2
+        exit 1
+    }
+    ENV_CREATED=1
+
+    # Step 2: create isolated home subvolume
+    echo ":: Creating home subvolume..."
+    btrfs subvolume create "${BTRFS_MOUNT}/${hv}" || {
+        echo "ERROR: Failed to create home subvolume" >&2
+        exit 1
+    }
+    ENV_HOME_CREATED=1
+
+    # Copy skeleton from current /home if it exists and home subvol is empty
+    if [[ -d "/home" ]]; then
+        # Copy top-level directory structure (not full content — just dirs + permissions)
+        local user_dir
+        for user_dir in /home/*/; do
+            [[ -d "$user_dir" ]] || continue
+            local username
+            username=$(basename "$user_dir")
+            local target="${BTRFS_MOUNT}/${hv}/${username}"
+            mkdir -p "$target"
+            # Preserve ownership
+            chown --reference="$user_dir" "$target" 2>/dev/null || true
+            chmod --reference="$user_dir" "$target" 2>/dev/null || true
+        done
+        echo "   Home skeleton created from current /home"
+    fi
+
+    # Step 3: mount and configure
+    echo ":: Mounting environment..."
+    local mount_dir="${NEW_ROOT}"
+    mkdir -p "$mount_dir"
+
+    local root_dev
+    root_dev=$(get_root_device) || { echo "ERROR: Cannot detect root device" >&2; exit 1; }
+
+    mount -o "subvol=/${sv}" "$root_dev" "$mount_dir" || {
+        echo "ERROR: Failed to mount environment root" >&2
+        exit 1
+    }
+    CLEANUP_MOUNT="$mount_dir"
+
+    # Bind mount ESP
+    mount --bind "${ESP}" "${mount_dir}${ESP}" || {
+        echo "ERROR: Failed to bind mount ESP" >&2
+        exit 1
+    }
+
+    # Bind mount pacman cache
+    mkdir -p "${mount_dir}/var/cache/pacman"
+    mount --bind "/var/cache/pacman" "${mount_dir}/var/cache/pacman" || {
+        echo "ERROR: Failed to bind mount pacman cache" >&2
+        exit 1
+    }
+
+    # Step 4: update fstab — root subvolume
+    echo ":: Updating fstab (root)..."
+    update_fstab "${mount_dir}/etc/fstab" "$current_subvol" "$sv" || {
+        echo "ERROR: Failed to update fstab root entry" >&2
+        exit 1
+    }
+
+    # Step 5: update fstab — home subvolume
+    echo ":: Updating fstab (home)..."
+    update_fstab_home "${mount_dir}/etc/fstab" "$hv" || {
+        echo "WARN: Could not update /home in fstab. Environment will share host /home." >&2
+    }
+
+    # Step 6: run chroot command if provided
+    if [[ ${#chroot_cmd[@]} -gt 0 ]]; then
+        echo ":: Running: ${chroot_cmd[*]}"
+        arch-chroot "$mount_dir" "${chroot_cmd[@]}" || {
+            echo "ERROR: Chroot command failed: ${chroot_cmd[*]}" >&2
+            exit 1
+        }
+    fi
+
+    # Step 7: build and sign UKI
+    echo ":: Building UKI..."
+    local uki_result
+    uki_result=$(build_uki "env-${name}" "$mount_dir" "$sv") || exit 1
+    sign_uki "$uki_result" || exit 1
+
+    # Step 8: unmount
+    echo ":: Unmounting..."
+    umount -R "$mount_dir" 2>/dev/null || umount -Rl "$mount_dir" 2>/dev/null
+    CLEANUP_MOUNT=""
+
+    # Success — prevent rollback
+    ENV_CREATED=0
+    ENV_HOME_CREATED=0
+    CLEANUP_ENV_NAME=""
+
+    echo "Environment '${name}' created."
+    echo "Boot with: atomic-env boot --default ${name}"
+}
+
+# ── Update ───────────────────────────────────────────────────────────
+
+do_update() {
+    local name="$1"; shift
+    validate_env_name "$name" || exit 1
+
+    [[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
+    validate_config || exit 1
+    check_dependencies || exit 1
+
+    local chroot_cmd=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --) shift; chroot_cmd=("$@"); break ;;
+            *) echo "ERROR: Unexpected argument: $1. Use -- before commands." >&2; exit 1 ;;
+        esac
+    done
+
+    if [[ ${#chroot_cmd[@]} -eq 0 ]]; then
+        chroot_cmd=(/usr/bin/pacman -Syu)
+    fi
+
+    local sv hv
+    sv=$(env_subvol "$name")
+    hv=$(env_home_subvol "$name")
+
+    acquire_lock
+    ensure_btrfs_mounted || exit 1
+
+    if [[ ! -d "${BTRFS_MOUNT}/${sv}" ]]; then
+        echo "ERROR: Environment not found: ${name}" >&2
+        echo "Use 'atomic-env create ${name}' first." >&2
+        exit 1
+    fi
+
+    echo ":: Updating environment '${name}'..."
+
+    local mount_dir="${NEW_ROOT}"
+    mkdir -p "$mount_dir"
+
+    local root_dev
+    root_dev=$(get_root_device) || { echo "ERROR: Cannot detect root device" >&2; exit 1; }
+
+    mount -o "subvol=/${sv}" "$root_dev" "$mount_dir" || {
+        echo "ERROR: Failed to mount environment" >&2
+        exit 1
+    }
+    CLEANUP_MOUNT="$mount_dir"
+
+    mount --bind "${ESP}" "${mount_dir}${ESP}" || {
+        echo "ERROR: Failed to bind mount ESP" >&2
+        exit 1
+    }
+
+    mkdir -p "${mount_dir}/var/cache/pacman"
+    mount --bind "/var/cache/pacman" "${mount_dir}/var/cache/pacman" || {
+        echo "ERROR: Failed to bind mount pacman cache" >&2
+        exit 1
+    }
+
+    echo ":: Running: ${chroot_cmd[*]}"
+    local chroot_failed=0
+    arch-chroot "$mount_dir" "${chroot_cmd[@]}" || {
+        echo "WARN: Chroot command failed: ${chroot_cmd[*]}" >&2
+        chroot_failed=1
+    }
+
+    # Rebuild UKI regardless — if chroot partially succeeded, the kernel
+    # inside the subvolume may have changed. The UKI must match what's on disk.
+    echo ":: Rebuilding UKI..."
+    local uki_result
+    uki_result=$(build_uki "env-${name}" "$mount_dir" "$sv") || {
+        echo "ERROR: UKI rebuild failed" >&2
+        umount -R "$mount_dir" 2>/dev/null || umount -Rl "$mount_dir" 2>/dev/null
+        CLEANUP_MOUNT=""
+        exit 1
+    }
+    sign_uki "$uki_result" || {
+        umount -R "$mount_dir" 2>/dev/null || umount -Rl "$mount_dir" 2>/dev/null
+        CLEANUP_MOUNT=""
+        exit 1
+    }
+
+    echo ":: Unmounting..."
+    umount -R "$mount_dir" 2>/dev/null || umount -Rl "$mount_dir" 2>/dev/null
+    CLEANUP_MOUNT=""
+
+    if [[ $chroot_failed -eq 1 ]]; then
+        echo "Environment '${name}' UKI rebuilt, but chroot command had errors."
+        echo "Review the output above and consider re-running the update."
+        exit 1
+    fi
+
+    echo "Environment '${name}' updated."
+}
+
+# ── Delete ───────────────────────────────────────────────────────────
+
+do_delete() {
+    local force=0
+    local name=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -y|--yes) force=1; shift ;;
+            -*) echo "ERROR: Unknown option: $1" >&2; exit 1 ;;
+            *)
+                if [[ -z "$name" ]]; then
+                    name="$1"; shift
+                else
+                    echo "ERROR: Too many arguments" >&2; exit 1
+                fi
+                ;;
+        esac
+    done
+
+    validate_env_name "$name" || exit 1
+
+    [[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
+    validate_config || exit 1
+
+    local sv hv uki_path
+    sv=$(env_subvol "$name")
+    hv=$(env_home_subvol "$name")
+    uki_path=$(env_uki_path "$name")
+
+    acquire_lock
+    ensure_btrfs_mounted || exit 1
+
+    # Verify environment exists (either subvolume or UKI)
+    if [[ ! -d "${BTRFS_MOUNT}/${sv}" && ! -f "$uki_path" ]]; then
+        echo "ERROR: Environment not found: ${name}" >&2
+        exit 1
+    fi
+
+    # Refuse to delete currently booted environment
+    local current_subvol
+    current_subvol=$(get_current_subvol)
+    if [[ "$sv" == "$current_subvol" ]]; then
+        echo "ERROR: Cannot delete currently booted environment '${name}'" >&2
+        exit 1
+    fi
+
+    # Confirmation
+    if [[ $force -eq 0 ]]; then
+        echo "Will delete environment '${name}':"
+        [[ -d "${BTRFS_MOUNT}/${sv}" ]] && echo "  Subvolume: ${sv}"
+        [[ -d "${BTRFS_MOUNT}/${hv}" ]] && echo "  Home:      ${hv}"
+        [[ -f "$uki_path" ]]            && echo "  UKI:       ${uki_path}"
+        read -rp "Continue? [y/N] " answer
+        [[ "$answer" =~ ^[Yy] ]] || { echo "Aborted"; exit 0; }
+    fi
+
+    echo ":: Deleting environment '${name}'..."
+
+    # Remove UKI
+    if [[ -f "$uki_path" ]]; then
+        rm -f "$uki_path"
+        echo "   Removed UKI"
+    fi
+
+    # Remove root subvolume
+    if [[ -d "${BTRFS_MOUNT}/${sv}" ]]; then
+        btrfs subvolume delete "${BTRFS_MOUNT}/${sv}" 2>/dev/null && \
+            echo "   Removed subvolume ${sv}" || \
+            echo "   WARN: Failed to delete subvolume ${sv}" >&2
+    fi
+
+    # Remove home subvolume
+    if [[ -d "${BTRFS_MOUNT}/${hv}" ]]; then
+        btrfs subvolume delete "${BTRFS_MOUNT}/${hv}" 2>/dev/null && \
+            echo "   Removed home ${hv}" || \
+            echo "   WARN: Failed to delete home subvolume ${hv}" >&2
+    fi
+
+    # Reset boot default if this env was the default
+    local current_default
+    current_default=$(bootctl list 2>/dev/null | grep -oP '(?<=→ ).*' | head -1) || true
+    if [[ "$current_default" == *"env-${name}"* ]]; then
+        echo "   Resetting boot default (was set to this environment)"
+        bootctl set-default "" 2>/dev/null || true
+    fi
+
+    echo "Environment '${name}' deleted."
+}
+
+# ── Boot ─────────────────────────────────────────────────────────────
+
+do_boot() {
+    local default_name=""
+    local reset=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --default)
+                [[ -n "${2:-}" ]] || { echo "ERROR: --default requires a name" >&2; exit 1; }
+                default_name="$2"; shift 2
+                ;;
+            --reset) reset=1; shift ;;
+            -*) echo "ERROR: Unknown option: $1" >&2; exit 1 ;;
+            *) echo "ERROR: Unexpected argument: $1" >&2; exit 1 ;;
+        esac
+    done
+
+    [[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
+
+    command -v bootctl >/dev/null || { echo "ERROR: bootctl not found" >&2; exit 1; }
+
+    if [[ $reset -eq 1 && -n "$default_name" ]]; then
+        echo "ERROR: Cannot use --default and --reset together" >&2
+        exit 1
+    fi
+
+    if [[ $reset -eq 1 ]]; then
+        echo ":: Resetting boot default..."
+        bootctl set-default "" || {
+            echo "ERROR: Failed to reset boot default" >&2
+            exit 1
+        }
+        echo "Boot default cleared. System will use firmware/bootloader default."
+        exit 0
+    fi
+
+    if [[ -z "$default_name" ]]; then
+        echo "ERROR: Specify --default NAME or --reset" >&2
+        exit 1
+    fi
+
+    validate_env_name "$default_name" || exit 1
+
+    local uki_path
+    uki_path=$(env_uki_path "$default_name")
+
+    if [[ ! -f "$uki_path" ]]; then
+        echo "ERROR: UKI not found for environment '${default_name}'" >&2
+        echo "Available environments:"
+        do_list
+        exit 1
+    fi
+
+    acquire_lock
+
+    # UKI filename relative to ESP for bootctl
+    local uki_entry="EFI/Linux/arch-env-${default_name}.efi"
+
+    echo ":: Setting default boot to '${default_name}'..."
+    bootctl set-default "$uki_entry" || {
+        echo "ERROR: Failed to set boot default" >&2
+        exit 1
+    }
+    echo "Default boot set to '${default_name}'. Reboot to activate."
+}
+
+# ── List ─────────────────────────────────────────────────────────────
+
+do_list() {
+    local current_subvol
+    current_subvol=$(get_current_subvol 2>/dev/null) || current_subvol=""
+
+    local found=0
+
+    printf "%-20s %-45s %s\n" "ENVIRONMENT" "UKI" "STATUS"
+    printf "%-20s %-45s %s\n" "───────────" "───" "──────"
+
+    for uki_file in "${ESP}/EFI/Linux/arch-env-"*.efi; do
+        [[ -e "$uki_file" ]] || continue
+
+        local filename="${uki_file##*/}"
+        # arch-env-NAME.efi → NAME
+        local name="${filename#arch-env-}"
+        name="${name%.efi}"
+
+        local sv
+        sv=$(env_subvol "$name")
+
+        local status=""
+        if [[ "$sv" == "$current_subvol" ]]; then
+            status="● booted"
+        fi
+
+        printf "%-20s %-45s %s\n" "$name" "$uki_file" "$status"
+        found=1
+    done
+
+    if [[ $found -eq 0 ]]; then
+        echo "No environments found."
+        echo "Create one with: atomic-env create NAME [-- COMMAND...]"
+    fi
+}
+
+# ── Main dispatch ────────────────────────────────────────────────────
+
+case "${1:-}" in
+    -h|--help) show_help ;;
+    -V|--version) echo "atomic-env v${VERSION}"; exit 0 ;;
+esac
+
+COMMAND="${1:-}"
+[[ -n "$COMMAND" ]] || { show_help; }
+shift
+
+case "$COMMAND" in
+    create) do_create "$@" ;;
+    update) do_update "$@" ;;
+    delete) do_delete "$@" ;;
+    boot)   do_boot "$@" ;;
+    list)   do_list ;;
+    *)
+        echo "ERROR: Unknown command: ${COMMAND}" >&2
+        echo "Run 'atomic-env --help' for usage." >&2
+        exit 1
+        ;;
+esac

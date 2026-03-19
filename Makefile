@@ -33,6 +33,7 @@ install:
 	install -Dm755 bin/atomic-gc          $(DESTDIR)$(BINDIR)/atomic-gc
 	install -Dm755 bin/atomic-guard       $(DESTDIR)$(BINDIR)/atomic-guard
 	install -Dm755 bin/atomic-rebuild-uki $(DESTDIR)$(BINDIR)/atomic-rebuild-uki
+	install -Dm755 bin/atomic-env         $(DESTDIR)$(BINDIR)/atomic-env
 
 	install -Dm644 lib/atomic/common.sh  $(DESTDIR)$(LIBDIR)/common.sh
 	install -Dm755 lib/atomic/fstab.py   $(DESTDIR)$(LIBDIR)/fstab.py
@@ -42,10 +43,18 @@ install:
 		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-gc
 	install -Dm644 completions/_atomic-rebuild-uki \
 		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-rebuild-uki
+	install -Dm644 completions/_atomic-upgrade \
+		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-upgrade
+	install -Dm644 completions/_atomic-env \
+		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-env
 	install -Dm644 completions/atomic-gc.bash \
 		$(DESTDIR)$(BASH_COMPDIR)/atomic-gc
 	install -Dm644 completions/atomic-rebuild-uki.bash \
 		$(DESTDIR)$(BASH_COMPDIR)/atomic-rebuild-uki
+	install -Dm644 completions/atomic-upgrade.bash \
+		$(DESTDIR)$(BASH_COMPDIR)/atomic-upgrade
+	install -Dm644 completions/atomic-env.bash \
+		$(DESTDIR)$(BASH_COMPDIR)/atomic-env
 
 	install -Dm644 hooks/00-block-direct-upgrade.hook \
 		$(DESTDIR)$(HOOKSDIR)/00-block-direct-upgrade.hook
@@ -70,11 +79,16 @@ uninstall:
 	rm -f  $(DESTDIR)$(BINDIR)/atomic-gc
 	rm -f  $(DESTDIR)$(BINDIR)/atomic-guard
 	rm -f  $(DESTDIR)$(BINDIR)/atomic-rebuild-uki
+	rm -f  $(DESTDIR)$(BINDIR)/atomic-env
 	rm -rf $(DESTDIR)$(LIBDIR)/
 	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-gc
 	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-rebuild-uki
+	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-upgrade
+	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-env
 	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-gc
 	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-rebuild-uki
+	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-upgrade
+	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-env
 	rm -f  $(DESTDIR)$(HOOKSDIR)/00-block-direct-upgrade.hook
 	rm -f  $(DESTDIR)$(PREFIX)/local/bin/pacman
 	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-upgrade.8
