@@ -140,6 +140,8 @@ acquire_lock() {
         echo "ERROR: Another atomic operation is running" >&2
         exit 1
     fi
+    # Note: LOCK_FD is inherited by child processes via fd inheritance,
+    # not via environment variable. Export is for cleanup handlers only.
     export LOCK_FD
 }
 
@@ -201,6 +203,9 @@ update_fstab_home() {
 # Args:
 #   $1 = target home path (e.g. ${BTRFS_MOUNT}/${hv})
 #   $2 = space-separated list of files to copy (optional, overrides HOME_COPY_FILES)
+#
+# Note: file paths are space-separated, so paths containing spaces
+# are not supported. Use symlinks or config aliases for such paths.
 
 populate_home_skeleton() {
     local target_home="$1"
@@ -222,9 +227,9 @@ populate_home_skeleton() {
         if [[ -n "$copy_files" ]]; then
             local file_rel
             for file_rel in $copy_files; do
-                # Sanitize: no absolute paths, no ..
+                # Sanitize: no absolute paths, no path traversal
                 case "$file_rel" in
-                    /*|*../*|*/../*)
+                    /*|..|*/..|*../*|*/../*)
                         echo "WARN: Skipping unsafe path: ${file_rel}" >&2
                         continue
                         ;;
@@ -638,6 +643,32 @@ garbage_collect() {
                     btrfs subvolume delete "$d" 2>/dev/null ||
                         echo "   WARN: Failed to delete orphan ${ehome_name}" >&2
                 fi
+            fi
+        done
+
+        # Orphan env home subvolumes (env root was deleted but home remains)
+        for d in "${BTRFS_MOUNT}"/env-*-home; do
+            [[ -d "$d" ]] || continue
+            local ehome_name="${d##*/}"
+            # env-NAME-home → env-NAME
+            local env_sv="${ehome_name%-home}"
+            if [[ ! -d "${BTRFS_MOUNT}/${env_sv}" ]]; then
+                echo "   Orphan env home: ${ehome_name}"
+                if [[ "$dry_run" -eq 0 ]]; then
+                    btrfs subvolume delete "$d" 2>/dev/null ||
+                        echo "   WARN: Failed to delete orphan ${ehome_name}" >&2
+                fi
+            fi
+        done
+
+        # Orphan env pre-update backup subvolumes (update crashed)
+        for d in "${BTRFS_MOUNT}"/env-*-pre-update; do
+            [[ -d "$d" ]] || continue
+            local backup_name="${d##*/}"
+            echo "   Orphan update backup: ${backup_name}"
+            if [[ "$dry_run" -eq 0 ]]; then
+                btrfs subvolume delete "$d" 2>/dev/null ||
+                    echo "   WARN: Failed to delete orphan ${backup_name}" >&2
             fi
         done
     fi
