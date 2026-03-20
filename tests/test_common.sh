@@ -176,7 +176,7 @@ EXPECTED_FUNCTIONS=(
     get_current_subvol get_current_subvol_raw get_root_device
     ensure_btrfs_mounted validate_subvolume check_btrfs_space
     check_esp_space list_generations build_uki garbage_collect
-    delete_generation
+    delete_generation warn_orphan_homes
 )
 
 for fn in "${EXPECTED_FUNCTIONS[@]}"; do
@@ -1044,6 +1044,65 @@ assert_not_contains "traversal no failure" "Failed" "$_out"
 # Test: empty copy_files produces skeleton message
 run_cmd populate_home_skeleton "$_PHS_TARGET" ""
 assert_eq "empty copy_files does not crash" "0" "$_rc"
+
+
+# ── warn_orphan_homes ──────────────────────────────
+
+section "warn_orphan_homes"
+
+ESP="${TESTDIR}/esp_woh"
+BTRFS_MOUNT="${TESTDIR}/btrfs_woh"
+mkdir -p "${ESP}/EFI/Linux" "$BTRFS_MOUNT"
+make_mock mountpoint 'exit 0'
+
+# ── Tagged gen is last with that tag → warns ──
+mkdir -p "${BTRFS_MOUNT}/home-vim"
+touch "${ESP}/EFI/Linux/arch-20260320-034104-vim.efi"
+# No other UKI with tag "vim"
+
+run_cmd warn_orphan_homes "20260320-034104-vim"
+assert_contains "warns about orphan home-vim" "home-vim" "$_out"
+assert_contains "shows removal hint" "btrfs subvolume delete" "$_out"
+
+# ── Another gen with same tag exists → no warning ──
+touch "${ESP}/EFI/Linux/arch-20260321-010000-vim.efi"
+
+run_cmd warn_orphan_homes "20260320-034104-vim"
+assert_not_contains "no warning when other vim gen exists" "home-vim" "$_out"
+
+rm -f "${ESP}/EFI/Linux/arch-20260321-010000-vim.efi"
+
+# ── Both gens with same tag deleted at once → warns ──
+touch "${ESP}/EFI/Linux/arch-20260321-010000-vim.efi"
+
+run_cmd warn_orphan_homes "20260320-034104-vim" "20260321-010000-vim"
+assert_contains "warns when all vim gens deleted" "home-vim" "$_out"
+
+rm -f "${ESP}/EFI/Linux/arch-20260321-010000-vim.efi"
+
+# ── Untagged gen → no warning ──
+run_cmd warn_orphan_homes "20260320-034104"
+assert_eq "untagged gen → no output" "" "$_out"
+
+# ── No home subvolume for tag → no warning ──
+rm -rf "${BTRFS_MOUNT}/home-vim"
+touch "${ESP}/EFI/Linux/arch-20260320-034104-vim.efi"
+
+run_cmd warn_orphan_homes "20260320-034104-vim"
+assert_eq "no home subvol → no output" "" "$_out"
+
+# ── Tag substring mismatch: home-vim not warned by super-vim ──
+mkdir -p "${BTRFS_MOUNT}/home-vim"
+touch "${ESP}/EFI/Linux/arch-20260322-010000-super-vim.efi"
+
+run_cmd warn_orphan_homes "20260322-010000-super-vim"
+assert_not_contains "super-vim does not affect home-vim" "home-vim" "$_out"
+
+rm -f "${ESP}/EFI/Linux/arch-20260322-010000-super-vim.efi"
+
+# Cleanup
+rm -f "${ESP}/EFI/Linux/arch-20260320-034104-vim.efi"
+
 
 # ── orphan home subvolumes in GC ──────────────
 
