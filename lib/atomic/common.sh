@@ -15,6 +15,8 @@ KERNEL_PKG="linux"
 LOCK_FILE="/var/lock/atomic-upgrade.lock"
 SBCTL_SIGN=0
 UPGRADE_GUARD=1
+# Files to copy from /home/<user>/ into isolated homes (space-separated)
+HOME_COPY_FILES=""
 # Kernel security parameters
 KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off"
 
@@ -34,11 +36,12 @@ load_config() {
     fi
 
     # Whitelist of allowed config keys
-    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD)
+    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD HOME_COPY_FILES)
 
     while IFS='=' read -r key value; do
-        # Strip whitespace
-        key="${key// /}"
+        # Strip leading/trailing whitespace from key
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
         # Trim leading/trailing whitespace from value
         value="${value#"${value%%[![:space:]]*}"}"
         value="${value%"${value##*[![:space:]]}"}"
@@ -179,6 +182,81 @@ verify_uki() {
 
 update_fstab() {
     python3 /usr/lib/atomic/fstab.py "$@"
+}
+
+# ── fstab /home update ──────────────────────────────────────────
+# Updates the /home mount entry's subvol= to point to a new subvolume.
+# Args: $1 = fstab path, $2 = new home subvolume name
+
+update_fstab_home() {
+    python3 /usr/lib/atomic/fstab.py home "$@"
+}
+
+# ── Home skeleton population ────────────────────────────────────
+# Creates user directories in a new home subvolume with correct
+# ownership/permissions. Optionally copies specific files.
+#
+# Args:
+#   $1 = target home path (e.g. ${BTRFS_MOUNT}/home-kde)
+#   $2 = space-separated list of files to copy (optional, falls back to HOME_COPY_FILES)
+#
+# Note: paths with spaces are not supported.
+
+populate_home_skeleton() {
+    local target_home="$1"
+    local copy_files="${2:-${HOME_COPY_FILES}}"
+
+    [[ -d "/home" ]] || return 0
+
+    local user_dir username target uid
+    for user_dir in /home/*/; do
+        [[ -d "$user_dir" ]] || continue
+        username=$(basename "$user_dir")
+        # Skip non-user directories (lost+found, system dirs)
+        uid=$(id -u "$username" 2>/dev/null) || continue
+        [[ $uid -ge 1000 ]] || continue
+        target="${target_home}/${username}"
+        mkdir -p "$target"
+        chown --reference="$user_dir" "$target" 2>/dev/null || true
+        chmod --reference="$user_dir" "$target" 2>/dev/null || true
+
+        if [[ -n "$copy_files" ]]; then
+            local file_rel
+            for file_rel in $copy_files; do
+                # Sanitize: no absolute paths, no path traversal
+                case "$file_rel" in
+                    /*|..|../*|*/../*|*/..)
+                        echo "WARN: Skipping unsafe path: ${file_rel}" >&2
+                        continue
+                        ;;
+                esac
+
+                local src="${user_dir}${file_rel}"
+                local dst="${target}/${file_rel}"
+
+                if [[ -e "$src" ]]; then
+                    local dst_dir
+                    dst_dir=$(dirname "$dst")
+                    if [[ ! -d "$dst_dir" ]]; then
+                        mkdir -p "$dst_dir"
+                        local src_dir
+                        src_dir=$(dirname "$src")
+                        chown --reference="$src_dir" "$dst_dir" 2>/dev/null || true
+                        chmod --reference="$src_dir" "$dst_dir" 2>/dev/null || true
+                    fi
+                    cp -a "$src" "$dst" 2>/dev/null || {
+                        echo "WARN: Failed to copy: ${file_rel}" >&2
+                    }
+                fi
+            done
+        fi
+    done
+
+    if [[ -n "$copy_files" ]]; then
+        echo "   Home skeleton created with files: ${copy_files}"
+    else
+        echo "   Home skeleton created (empty user directories)"
+    fi
 }
 
 # ── Root device detection ───────────────────────────────────────────
@@ -499,6 +577,21 @@ garbage_collect() {
             if [[ ! -d "${BTRFS_MOUNT}/root-${uki_name}" ]]; then
                 echo "   Orphan UKI: ${uki_name} (no subvolume)"
                 [[ "$dry_run" -eq 0 ]] && rm -f "$uki"
+            fi
+        done
+
+        # Orphan home subvolumes — warn only, never auto-delete (user data)
+        for d in "${BTRFS_MOUNT}"/home-*; do
+            [[ -d "$d" ]] || continue
+            local home_name="${d##*/}"
+            local tag="${home_name#home-}"
+            local has_gen=0
+            for uki in "${ESP}/EFI/Linux/arch-"*"-${tag}.efi"; do
+                [[ -e "$uki" ]] && { has_gen=1; break; }
+            done
+            if [[ $has_gen -eq 0 ]]; then
+                echo "   Orphan home: ${home_name} (no generations with tag '${tag}')"
+                echo "   To remove: btrfs subvolume delete ${BTRFS_MOUNT}/${home_name}"
             fi
         done
     fi
