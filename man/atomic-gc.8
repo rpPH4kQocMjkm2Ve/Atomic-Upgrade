@@ -27,6 +27,11 @@ Subvolumes that have no matching UKI on the ESP.
 .IP \[bu] 2
 UKI files that have no matching subvolume.
 .PP
+Orphan \f[I]home\-*\f[R] subvolumes (created by
+\f[B]\-\-separate\-home\f[R]) are \f[B]reported but never
+auto\-deleted\f[R] \[em] they may contain user data.
+A message with the manual deletion command is printed for each orphan.
+.PP
 If the ESP is not mounted during the orphan sweep, it is skipped with a
 warning.
 .SH SUBCOMMANDS

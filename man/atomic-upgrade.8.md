@@ -1,4 +1,3 @@
-```markdown
 ---
 title: ATOMIC-UPGRADE
 section: 8
@@ -12,7 +11,7 @@ atomic-upgrade — atomic system upgrades for Arch Linux on Btrfs
 
 # SYNOPSIS
 
-**atomic-upgrade** [**-n**|**\--dry-run**] [**-t**|**\--tag** *TAG*] [**\--no-gc**] [**\--** *COMMAND*...]
+**atomic-upgrade** [**-n**|**\--dry-run**] [**-t**|**\--tag** *TAG*] [**\--no-gc**] [**\--separate-home**] [**\--copy-files** *"FILE ..."*] [**\--** *COMMAND*...]
 
 **atomic-rebuild-uki** [**-l**|**\--list**] *GEN_ID*
 
@@ -50,6 +49,18 @@ Use it to recover an accidentally deleted *.efi* file.
 **\--no-gc**
 :   Skip garbage collection after a successful upgrade.
 
+**\--separate-home**
+:   Create an isolated */home* Btrfs subvolume for this generation. The
+    subvolume is named *home-TAG*, so **\--tag** is required. If a subvolume
+    with that name already exists, it is reused. See **EXPERIMENTAL HOME
+    ISOLATION** below.
+
+**\--copy-files** *"FILE ..."*
+:   Space-separated list of files to copy from the current */home/<user>/*
+    into the new home subvolume. Paths are relative to the user's home
+    directory. Requires **\--separate-home**. Overrides **HOME_COPY_FILES**
+    from **atomic.conf**(5). Paths with spaces are not supported.
+
 **\--** *COMMAND*...
 :   Run *COMMAND* in the snapshot chroot instead of the default
     **pacman -Syu**.
@@ -59,6 +70,24 @@ Use it to recover an accidentally deleted *.efi* file.
 
 **-V**, **\--version**
 :   Show version and exit.
+
+# EXPERIMENTAL HOME ISOLATION
+
+**This feature is for throwaway experiments, not permanent environments.**
+Permanent setups should use regular generations with the shared */home*
+subvolume.
+
+When **\--separate-home** is used, the generation gets its own */home*
+subvolume so that experiments with dotfiles, desktop environment configs,
+or user-level packages do not affect the main home. If the experiment fails,
+delete the generation; garbage collection will report the orphan home
+subvolume but will **never auto-delete it** (it may contain user data).
+
+The home subvolume is populated with empty user directories (matching users
+with UID >= 1000) and, optionally, specific files copied from the current
+home via **\--copy-files** or the **HOME_COPY_FILES** config option.
+
+Safety: absolute paths and **..** traversal in file lists are rejected.
 
 # UPGRADE GUARD
 
@@ -160,6 +189,14 @@ Run AUR helper inside the snapshot:
 Upgrade with a custom tag:
 
     sudo atomic-upgrade -t pre-nvidia
+
+Experiment with KDE in isolated home (throwaway):
+
+    sudo atomic-upgrade --separate-home -t kde -- pacman -S plasma-meta
+
+Experiment with dev tools, copying dotfiles:
+
+    sudo atomic-upgrade --separate-home -t dev --copy-files ".bashrc .ssh" -- pacman -S base-devel
 
 Rebuild a missing UKI:
 

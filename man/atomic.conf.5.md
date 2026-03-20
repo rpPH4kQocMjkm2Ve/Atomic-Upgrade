@@ -70,6 +70,13 @@ rejected entirely.
 :   Enable the upgrade guard (pacman hook and wrapper). Set to **1** to
     block direct **pacman -Syu**, **0** to allow it. Default: **1**.
 
+**HOME_COPY_FILES**
+:   Space-separated list of files to copy from */home/<user>/* into isolated
+    home subvolumes created with **\--separate-home**. Paths are relative to
+    the user's home directory. The **\--copy-files** flag on the command line
+    overrides this value per invocation. Paths with spaces are not supported.
+    Default: *(empty)*.
+
 # SECURITY
 
 The configuration file must be owned by root. If the file is owned by
@@ -107,6 +114,10 @@ Disable upgrade guard:
 Keep more generations:
 
     KEEP_GENERATIONS=5
+
+Default files for isolated homes:
+
+    HOME_COPY_FILES=".bashrc .bash_profile .ssh .gnupg .gitconfig"
 
 # SEE ALSO
 

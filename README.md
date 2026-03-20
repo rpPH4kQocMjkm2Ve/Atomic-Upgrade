@@ -92,13 +92,14 @@ sudo atomic-rebuild-uki 20250208-134725                # rebuild UKI for specifi
 
 ### Shell completion
 
-Tab completion is available for `atomic-gc` and `atomic-rebuild-uki` in both zsh and bash:
+Tab completion is available for `atomic-gc`, `atomic-rebuild-uki`, and `atomic-upgrade` in both zsh and bash:
 
 ```bash
 atomic-gc <TAB>              # → list  rm
 atomic-gc rm <TAB>           # → generation IDs from ESP
 atomic-rebuild-uki <TAB>     # → generation IDs from ESP
 atomic-rebuild-uki -<TAB>    # → --help --list -h -l
+atomic-upgrade -<TAB>        # → --dry-run --tag --no-gc --separate-home ...
 ```
 
 Completions are installed automatically. For bash, the `bash-completion` package must
@@ -159,6 +160,7 @@ Edit `/etc/atomic.conf`:
 | `KERNEL_PARAMS` | *(security defaults)* | Kernel command line parameters |
 | `SBCTL_SIGN` | `0` | Sign UKI files with sbctl for Secure Boot (`0`=off, `1`=on) |
 | `UPGRADE_GUARD` | `1` | Upgrade guard: block direct `pacman -Syu` (`0`=off, `1`=on) |
+| `HOME_COPY_FILES` | *(empty)* | Files to copy into isolated home subvolumes (see [Experimental home isolation](#experimental-home-isolation)) |
 
 Default `KERNEL_PARAMS`: `rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off`
 
@@ -240,6 +242,59 @@ sudo atomic-upgrade -- bash -c '/usr/bin/pacman -Syu && sudo -u YOUR_USER yay -S
 > upgrade applies to the live system and is **not atomic**. The next
 > `atomic-upgrade` will snapshot whatever state the live system is in.
 
+## Experimental home isolation
+
+> **This feature is for throwaway experiments, not permanent environments.**
+> Permanent setups should use regular generations with the shared `/home` subvolume.
+
+`--separate-home` creates an isolated `/home` subvolume for the generation — so
+experiments with dotfiles, DE configs, or user-level packages don't pollute your
+main home. If something goes wrong, delete the generation and the home subvolume
+is orphaned; GC will warn you about it.
+
+```bash
+# Try KDE without touching your current home
+sudo atomic-upgrade --separate-home -t kde -- pacman -S plasma-meta
+
+# Experiment with dev tooling, bring specific dotfiles
+sudo atomic-upgrade --separate-home -t dev --copy-files ".bashrc .ssh .gitconfig" -- pacman -S base-devel
+
+# Dry run to preview
+sudo atomic-upgrade --dry-run --separate-home -t test
+```
+
+**How it works:**
+
+1. A new Btrfs subvolume `home-TAG` is created (or reused if it already exists)
+2. User directories are created with correct ownership (users with UID ≥ 1000)
+3. Files listed in `--copy-files` (or `HOME_COPY_FILES` from config) are copied from
+   current `/home/<user>/` into the new home
+4. The generation's fstab is updated so `/home` points to the new subvolume
+
+**Constraints:**
+
+- Requires `--tag` (the home subvolume is named `home-TAG`)
+- `--copy-files` requires `--separate-home`
+- File paths with spaces are not supported
+- Absolute paths and `..` traversal are rejected for safety
+
+**Cleanup:** GC never auto-deletes home subvolumes (they contain user data). When
+all generations referencing a tag are gone, GC reports the orphan:
+
+```
+   Orphan home: home-kde (no generations with tag 'kde')
+   To remove: btrfs subvolume delete /run/atomic/temp_root/home-kde
+```
+
+A default set of files to copy can be configured:
+
+```bash
+# /etc/atomic.conf
+HOME_COPY_FILES=".bashrc .bash_profile .ssh .gnupg .gitconfig"
+```
+
+The `--copy-files` flag overrides `HOME_COPY_FILES` per invocation.
+
 ## Disk space checks
 
 Before creating a snapshot, `atomic-upgrade` checks available disk space on both the Btrfs filesystem and the ESP:
@@ -255,6 +310,8 @@ If disk space cannot be determined (e.g. `btrfs` and `df` both fail), a warning 
 - `root-*` subvolumes that have no matching UKI on the ESP
 - UKI files on the ESP that have no matching subvolume
 
+Orphan `home-*` subvolumes (where no generation with that tag exists) are **reported but never auto-deleted** — they may contain user data. Use `btrfs subvolume delete` to remove them manually.
+
 If the ESP is not mounted during the orphan sweep phase, it is skipped with a warning — orphans will be cleaned up on the next run.
 
 ## Components
@@ -265,11 +322,11 @@ If the ESP is not mounted during the orphan sweep phase, it is skipped with a wa
 | `atomic-gc` | Generation management — garbage collection, list, manual delete |
 | `atomic-guard` | Pacman hook — blocks direct `-Syu`, allows installs/removes |
 | `atomic-rebuild-uki` | Rebuild UKI for existing snapshot |
-| `common.sh` | Shared library (config, locking, btrfs, UKI build, GC) |
+| `common.sh` | Shared library (config, locking, btrfs, UKI build, GC, home skeleton) |
 | `fstab.py` | Safe fstab editing (atomic write + verification + rollback) |
 | `rootdev.py` | Auto-detect root device type (LUKS/LVM/plain) and build kernel cmdline |
 | `pacman-wrapper` | Optional `/usr/local/bin/pacman` wrapper |
-| `completions/` | Zsh and bash tab completions for `atomic-gc` and `atomic-rebuild-uki` |
+| `completions/` | Zsh and bash tab completions for `atomic-gc`, `atomic-rebuild-uki`, and `atomic-upgrade` |
 
 ## Troubleshooting
 

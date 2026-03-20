@@ -74,6 +74,15 @@ Enable the upgrade guard (pacman hook and wrapper).
 Set to \f[B]1\f[R] to block direct \f[B]pacman \-Syu\f[R], \f[B]0\f[R]
 to allow it.
 Default: \f[B]1\f[R].
+.TP
+\f[B]HOME_COPY_FILES\f[R]
+Space\-separated list of files to copy from \f[I]/home//\f[R] into
+isolated home subvolumes created with \f[B]\-\-separate\-home\f[R].
+Paths are relative to the user\[cq]s home directory.
+The \f[B]\-\-copy\-files\f[R] flag on the command line overrides this
+value per invocation.
+Paths with spaces are not supported.
+Default: \f[I](empty)\f[R].
 .SH SECURITY
 The configuration file must be owned by root.
 If the file is owned by another user, it is rejected and no values are
@@ -121,6 +130,12 @@ Keep more generations:
 .IP
 .EX
 KEEP_GENERATIONS=5
+.EE
+.PP
+Default files for isolated homes:
+.IP
+.EX
+HOME_COPY_FILES=\[dq].bashrc .bash_profile .ssh .gnupg .gitconfig\[dq]
 .EE
 .SH SEE ALSO
 \f[B]atomic\-upgrade\f[R](8), \f[B]atomic\-gc\f[R](8),

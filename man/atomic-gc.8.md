@@ -31,6 +31,10 @@ sweep removes:
 - Subvolumes that have no matching UKI on the ESP.
 - UKI files that have no matching subvolume.
 
+Orphan *home-\** subvolumes (created by **\--separate-home**) are **reported
+but never auto-deleted** — they may contain user data. A message with the
+manual deletion command is printed for each orphan.
+
 If the ESP is not mounted during the orphan sweep, it is skipped with a
 warning.
 
