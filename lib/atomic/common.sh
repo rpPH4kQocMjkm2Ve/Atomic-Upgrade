@@ -22,7 +22,7 @@ KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsysc
 
 # ── Config loading (safe parser, no arbitrary code execution) ───────
 
-CONFIG_FILE="/etc/atomic.conf"
+CONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"
 
 load_config() {
     [[ -f "$CONFIG_FILE" ]] || return 0
