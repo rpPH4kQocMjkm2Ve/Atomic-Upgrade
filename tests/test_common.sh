@@ -628,6 +628,97 @@ assert_contains "reports missing btrfs" "btrfs" "$_out"
 PATH="$_save_path"
 
 
+# ── check_dependencies: missing ukify ──
+_dep_bin2="${TESTDIR}/dep_bin2"
+mkdir -p "$_dep_bin2"
+for cmd in btrfs findmnt arch-chroot; do
+    make_mock_in "$_dep_bin2" "$cmd" 'exit 0'
+done
+# python3: return empty root type so cryptsetup isn't required
+make_mock_in "$_dep_bin2" python3 'echo ""'
+# Omit ukify
+
+_save_path="$PATH"
+PATH="$_dep_bin2"
+run_cmd check_dependencies
+assert_eq "missing ukify → rc 1" "1" "$_rc"
+assert_contains "reports missing ukify" "ukify" "$_out"
+PATH="$_save_path"
+
+# ── check_dependencies: missing python3 ──
+_dep_bin3="${TESTDIR}/dep_bin3"
+mkdir -p "$_dep_bin3"
+for cmd in btrfs ukify findmnt arch-chroot; do
+    make_mock_in "$_dep_bin3" "$cmd" 'exit 0'
+done
+# Omit python3
+
+_save_path="$PATH"
+PATH="$_dep_bin3"
+run_cmd check_dependencies
+assert_eq "missing python3 → rc 1" "1" "$_rc"
+assert_contains "reports missing python3" "python3" "$_out"
+PATH="$_save_path"
+
+# ── check_dependencies: LUKS root requires cryptsetup ──
+_dep_bin4="${TESTDIR}/dep_bin4"
+mkdir -p "$_dep_bin4"
+for cmd in btrfs ukify findmnt arch-chroot; do
+    make_mock_in "$_dep_bin4" "$cmd" 'exit 0'
+done
+# python3 mock: first call is "rootdev.py detect", second is "-c ..." JSON parser
+# The pipe means two separate python3 invocations.
+make_mock_in "$_dep_bin4" python3 '
+if [[ "$1" == *"rootdev.py" || "$1" == *"rootdev"* ]]; then
+    echo "{\"type\": \"luks\"}"
+elif [[ "$1" == "-c" ]]; then
+    echo "luks"
+else
+    echo ""
+fi
+'
+# Omit cryptsetup
+
+_save_path="$PATH"
+PATH="$_dep_bin4"
+run_cmd check_dependencies
+assert_eq "LUKS without cryptsetup → rc 1" "1" "$_rc"
+assert_contains "reports missing cryptsetup" "cryptsetup" "$_out"
+PATH="$_save_path"
+
+# ── check_dependencies: all present → rc 0 ──
+_dep_bin5="${TESTDIR}/dep_bin5"
+mkdir -p "$_dep_bin5"
+for cmd in btrfs ukify findmnt arch-chroot; do
+    make_mock_in "$_dep_bin5" "$cmd" 'exit 0'
+done
+make_mock_in "$_dep_bin5" python3 'echo ""'
+
+_save_path="$PATH"
+PATH="$_dep_bin5"
+run_cmd check_dependencies
+assert_eq "all deps present → rc 0" "0" "$_rc"
+PATH="$_save_path"
+
+# ── check_dependencies: SBCTL_SIGN=1 requires sbctl ──
+_dep_bin6="${TESTDIR}/dep_bin6"
+mkdir -p "$_dep_bin6"
+for cmd in btrfs ukify findmnt arch-chroot; do
+    make_mock_in "$_dep_bin6" "$cmd" 'exit 0'
+done
+make_mock_in "$_dep_bin6" python3 'echo ""'
+# Omit sbctl
+
+_save_path="$PATH"
+SBCTL_SIGN=1
+PATH="$_dep_bin6"
+run_cmd check_dependencies
+assert_eq "SBCTL_SIGN=1 without sbctl → rc 1" "1" "$_rc"
+assert_contains "reports missing sbctl" "sbctl" "$_out"
+PATH="$_save_path"
+SBCTL_SIGN=0
+
+
 # ── ensure_btrfs_mounted ────────────────────────────────────
 
 section "ensure_btrfs_mounted"
@@ -1047,10 +1138,33 @@ echo "user_data" > "${_PHS_HOME}/${_PHS_USER}/.bashrc"
 mkdir -p "${_PHS_HOME}/${_PHS_USER}/.ssh"
 echo "key" > "${_PHS_HOME}/${_PHS_USER}/.ssh/id_rsa"
 
-# Test: unsafe path rejection (path traversal)
-run_cmd populate_home_skeleton "$_PHS_TARGET" "../../../etc/shadow"
-assert_eq "traversal does not crash" "0" "$_rc"
-assert_not_contains "traversal no failure" "Failed" "$_out"
+# Create file outside user dir for traversal test
+echo "secret" > "${_PHS_HOME}/shadow_file"
+
+# Mock id to return uid 1000 for our fake user
+make_mock id '
+if [[ "$1" == "-u" && "$2" == "testuser_phs" ]]; then
+    echo "1000"
+else
+    exit 1
+fi
+'
+
+# Wrapper: calls populate_home_skeleton with /home overridden.
+# We create a temporary script that re-sources common.sh, redefines
+# the function body with /home replaced, and calls it.
+_phs_test() {
+    local target="$1"; shift
+    local copy_files="$1"; shift
+    # Re-source common.sh to get a clean function, then patch it
+    local func_body
+    func_body=$(declare -f populate_home_skeleton)
+    # Replace bare /home with our test path — only whole /home/ and /home"
+    func_body="${func_body//for user_dir in \/home\//for user_dir in ${_PHS_HOME}/}"
+    func_body="${func_body//\[[ -d \"\/home\" ]]/[[ -d \"${_PHS_HOME}\" ]]}"
+    eval "$func_body"
+    populate_home_skeleton "$target" "$copy_files"
+}
 
 # Test: normal file copy works
 rm -rf "${_PHS_TARGET:?}"/*
