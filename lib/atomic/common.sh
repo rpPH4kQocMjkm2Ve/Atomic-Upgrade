@@ -443,6 +443,7 @@ build_uki() {
     for d in "${modules_dir}"/*/; do
         [[ -f "${d}pkgbase" ]] || continue
         if [[ "$(cat "${d}pkgbase")" == "$KERNEL_PKG" ]]; then
+            d="${d%/}"
             uname_ver="${d##*/}"
             break
         fi

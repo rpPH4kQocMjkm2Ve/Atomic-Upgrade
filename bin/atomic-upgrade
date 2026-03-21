@@ -261,6 +261,7 @@ _snap_kver=""
 for _mod_dir in "${NEW_ROOT}/usr/lib/modules"/*/; do
     [[ -f "${_mod_dir}pkgbase" ]] || continue
     [[ "$(cat "${_mod_dir}pkgbase")" == "$KERNEL_PKG" ]] || continue
+    _mod_dir="${_mod_dir%/}"
     _snap_kver="${_mod_dir##*/}"
 done
 [[ -n "$_snap_kver" ]] || {
