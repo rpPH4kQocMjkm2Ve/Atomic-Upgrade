@@ -15,10 +15,11 @@ sudo atomic-upgrade
   1. Btrfs snapshot of current root
   2. Mount snapshot, arch-chroot into it
   3. Run command (default: pacman -Syu)
-  4. Update fstab (subvol=)
-  5. Build UKI (ukify)
-  6. Sign with sbctl (if SBCTL_SIGN=1)
-  7. Garbage collect old generations
+  4. Verify snapshot consistency (kernel, initramfs, modules)
+  5. Update fstab (subvol=)
+  6. Build UKI (ukify)
+  7. Sign with sbctl (if SBCTL_SIGN=1)
+  8. Garbage collect old generations
         ↓
   reboot → new generation active
 ```
@@ -45,7 +46,7 @@ Each generation is a snapshot + UKI pair. The UKI contains the kernel and initra
 | **AUR** | ✓ (native¹) | ✓ (transparent) | ✓ (transparent) | ✗ | ✗ |
 | **LUKS handling** | Auto-detect + cmdline | N/A (not in scope) | N/A (not in scope) | Built-in | Built-in |
 | **GC** | ✓ (auto + manual) | ✓ (timeline/number) | ✓ (by count) | ✓ | ✓ |
-| **Codebase** | ~1500 LOC (bash+python) | Large (C++) | Large (Vala) | Entire OS | Entire OS |
+| **Codebase** | ~2000 LOC (bash+python) | Large (C++) | Large (Vala) | Entire OS | Entire OS |
 | **Learning curve** | Low (plain Arch) | Low | Low | High (Nix lang) | Medium (OSTree) |
 
 > ¹ AUR helpers work inside the snapshot — see [AUR helpers](#aur-helpers).
@@ -378,6 +379,7 @@ The tool places `.efi` files into `ESP/EFI/Linux/` (signed or unsigned depending
 > ├── root-<timestamp> → / (current generation)
 > ├── root-<timestamp> → previous generations
 > └── ...
+> ```
 
 ### Dependencies
 
