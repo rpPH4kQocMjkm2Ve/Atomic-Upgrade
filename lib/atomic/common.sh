@@ -76,7 +76,13 @@ load_config() {
     done < "$CONFIG_FILE"
 }
 
-load_config
+# ── Auto-initialization ──────────────────────────────────────────────
+# Skipped when _ATOMIC_NO_INIT is set (e.g. in test harnesses that
+# source common.sh only for function definitions and defaults).
+
+if [[ -z "${_ATOMIC_NO_INIT:-}" ]]; then
+    load_config
+fi
 
 # ── Validation ──────────────────────────────────────────────────────
 
