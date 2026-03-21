@@ -1035,26 +1035,64 @@ ESP="/efi"
 
 section "populate_home_skeleton"
 
-# Test: unsafe path rejection (absolute path)
-# Function iterates /home/* which may be empty in CI —
-# Safety checks are inside the per-user loop, so if /home is empty
-# in CI the paths won't be exercised — but the function must not crash
-# the function doesn't crash and doesn't emit "Failed"
+# Create a fake home directory with a test user.
+_PHS_HOME="${TESTDIR}/phs_home"
 _PHS_TARGET="${TESTDIR}/phs_target"
+_PHS_USER="testuser_phs"
+mkdir -p "${_PHS_HOME}/${_PHS_USER}"
 mkdir -p "$_PHS_TARGET"
 
-run_cmd populate_home_skeleton "$_PHS_TARGET" "/etc/passwd"
-assert_eq "absolute path does not crash" "0" "$_rc"
-assert_not_contains "absolute path no failure" "Failed" "$_out"
+# Create files for copy tests
+echo "user_data" > "${_PHS_HOME}/${_PHS_USER}/.bashrc"
+mkdir -p "${_PHS_HOME}/${_PHS_USER}/.ssh"
+echo "key" > "${_PHS_HOME}/${_PHS_USER}/.ssh/id_rsa"
 
 # Test: unsafe path rejection (path traversal)
 run_cmd populate_home_skeleton "$_PHS_TARGET" "../../../etc/shadow"
 assert_eq "traversal does not crash" "0" "$_rc"
 assert_not_contains "traversal no failure" "Failed" "$_out"
 
-# Test: empty copy_files produces skeleton message
-run_cmd populate_home_skeleton "$_PHS_TARGET" ""
+# Test: normal file copy works
+rm -rf "${_PHS_TARGET:?}"/*
+run_cmd _phs_test "$_PHS_TARGET" ".bashrc"
+assert_eq "normal copy succeeds" "0" "$_rc"
+[[ -f "${_PHS_TARGET}/${_PHS_USER}/.bashrc" ]] \
+    && ok "normal file copied" || fail "normal file not copied"
+
+# Test: directory copy works
+rm -rf "${_PHS_TARGET:?}"/*
+run_cmd _phs_test "$_PHS_TARGET" ".ssh"
+assert_eq "dir copy succeeds" "0" "$_rc"
+[[ -f "${_PHS_TARGET}/${_PHS_USER}/.ssh/id_rsa" ]] \
+    && ok "nested file copied" || fail "nested file not copied"
+
+# Test: path traversal is blocked — file must NOT appear
+rm -rf "${_PHS_TARGET:?}"/*
+run_cmd _phs_test "$_PHS_TARGET" "../shadow_file"
+assert_eq "traversal does not crash" "0" "$_rc"
+[[ ! -f "${_PHS_TARGET}/${_PHS_USER}/../shadow_file" ]] \
+    && ok "traversal file not copied (relative)" || fail "traversal file was copied"
+[[ ! -f "${_PHS_TARGET}/shadow_file" ]] \
+    && ok "traversal file not copied (resolved)" || fail "traversal file appeared at target root"
+
+# Test: absolute path is blocked
+rm -rf "${_PHS_TARGET:?}"/*
+run_cmd _phs_test "$_PHS_TARGET" "/etc/passwd"
+assert_eq "absolute path does not crash" "0" "$_rc"
+[[ ! -f "${_PHS_TARGET}/${_PHS_USER}/etc/passwd" ]] \
+    && ok "absolute path not copied" || fail "absolute path was copied"
+[[ ! -f "${_PHS_TARGET}/etc/passwd" ]] \
+    && ok "absolute path not at target root" || fail "absolute path appeared at target root"
+
+# Test: empty copy_files produces skeleton with user directory
+rm -rf "${_PHS_TARGET:?}"/*
+run_cmd _phs_test "$_PHS_TARGET" ""
 assert_eq "empty copy_files does not crash" "0" "$_rc"
+[[ -d "${_PHS_TARGET}/${_PHS_USER}" ]] \
+    && ok "user dir created with empty copy_files" || fail "user dir not created"
+
+# Restore id mock
+make_mock id 'exit 1'
 
 
 # ── warn_orphan_homes ──────────────────────────────
