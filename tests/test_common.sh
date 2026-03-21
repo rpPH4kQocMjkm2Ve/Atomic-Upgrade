@@ -1143,6 +1143,38 @@ assert_not_contains "non-orphan home not flagged" "Orphan home: home-kde" "$_out
 [[ -d "${BTRFS_MOUNT}/home-kde" ]] \
     && ok "active home preserved" || fail "active home was deleted"
 
+# ── GC orphan home: glob false positive (tag suffix match) ──
+# Regression test: glob "*-${tag}.efi" would match "super-kde" for
+# home-kde.  The regex-based check must require an exact tag match.
+
+section "garbage_collect: orphan home glob false positive"
+
+ESP="${TESTDIR}/esp_orphan_glob"
+BTRFS_MOUNT="${TESTDIR}/btrfs_orphan_glob"
+mkdir -p "${ESP}/EFI/Linux" "$BTRFS_MOUNT"
+
+make_mock findmnt    'echo "rw,subvol=/root-20250605-120000"'
+make_mock btrfs      'exit 0'
+make_mock mountpoint 'exit 0'
+_ROOT_DEVICE="${TESTDIR}/fake_dev/root_crypt"
+
+# Current generation (untagged)
+touch "${ESP}/EFI/Linux/arch-20250605-120000.efi"
+mkdir -p "${BTRFS_MOUNT}/root-20250605-120000"
+
+# Generation with tag "super-kde" — must NOT protect home-kde
+touch "${ESP}/EFI/Linux/arch-20250604-100000-super-kde.efi"
+mkdir -p "${BTRFS_MOUNT}/root-20250604-100000-super-kde"
+
+# home-kde: no generation with exact tag "kde" → must be orphan
+mkdir -p "${BTRFS_MOUNT}/home-kde"
+
+# home-super-kde: has a matching generation → not orphan
+mkdir -p "${BTRFS_MOUNT}/home-super-kde"
+
+run_cmd garbage_collect 3 0
+assert_contains "glob fp: home-kde flagged as orphan" "Orphan home: home-kde" "$_out"
+assert_not_contains "glob fp: home-super-kde not orphan" "Orphan home: home-super-kde" "$_out"
 
 # ═══════════════════════════════════════════════════════════════
 #  RESULTS
