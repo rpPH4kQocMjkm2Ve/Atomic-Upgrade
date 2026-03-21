@@ -6,14 +6,16 @@ on:
       - 'bin/**'
       - 'lib/**'
       - 'extras/**'
-      - 'tests/**'
+      - 'tests/*.sh'
+      - 'tests/*.py'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'bin/**'
       - 'lib/**'
       - 'extras/**'
-      - 'tests/**'
+      - 'tests/*.sh'
+      - 'tests/*.py'
       - '.github/workflows/ci.yml'
 
 jobs:
