@@ -22,6 +22,7 @@ import re
 import stat as stat_mod
 import sys
 import shutil
+import tempfile
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -158,11 +159,15 @@ class FstabEntry:
 
 def _atomic_write(path: Path, entries: list) -> None:
     """Write entries to fstab atomically with permission preservation."""
-    tmp = path.with_suffix(".tmp")
     original_stat = path.stat()
     content = "".join(e.format() for e in entries).encode()
 
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    # Use mkstemp for unique temp file name (safe against parallel callers)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+    )
+    tmp = Path(tmp_name)
+
     try:
         os.write(fd, content)
         os.fsync(fd)
