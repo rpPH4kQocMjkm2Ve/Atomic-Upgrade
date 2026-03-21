@@ -4,7 +4,7 @@
 
 | File | Language | Framework | What it tests |
 |------|----------|-----------|---------------|
-| `test_common.sh` | Bash | Custom assertions | `common.sh` — config loading, validation, locking, subvol/device detection, space checks, GC, home skeleton, orphan warnings |
+| `test_common.sh` | Bash | Custom assertions | `common.sh` — config loading, validation, locking, subvol/device detection, space checks, GC, home skeleton, orphan warnings, UKI build |
 | `test_integration.sh` | Bash | Custom assertions | `atomic-guard` and `pacman-wrapper` end-to-end — config propagation, lock verification, sysupgrade detection, AUR helper bypass |
 | `test_fstab.py` | Python | pytest | `fstab.py` — fstab entry parsing, `subvol=` replacement (root and /home), atomic write with permission preservation, backup/rollback, subvolid= diagnostics |
 | `test_rootdev.py` | Python | pytest | `rootdev.py` — root device detection (plain btrfs, LUKS, LVM, LUKS+LVM), bracket stripping in findmnt source, cmdline generation, CLI dispatch |
@@ -38,6 +38,7 @@ Both suites use a custom lightweight test harness (`ok`/`fail`/`assert_eq`/`asse
 - Space checks: btrfs native and df fallback, percentage vs absolute thresholds
 - Dependency checking: missing command detection
 - Home skeleton: path traversal rejection, empty file list handling
+- UKI build: missing kernel/initramfs/os-release detection, rootdev.py failure, ukify failure and missing output, kernel version via pkgbase and fallback, `--uname` omission, cmdline composition (root device + subvol + kernel params), PRETTY_NAME rewrite, custom KERNEL_PKG, tagged gen_id
 
 **`test_integration.sh`** copies and patches project scripts into a temporary prefix (rewriting paths with `sed`), then runs `atomic-guard` and `pacman-wrapper` as separate processes. Tests verify:
 
