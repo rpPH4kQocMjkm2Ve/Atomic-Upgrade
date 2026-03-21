@@ -591,8 +591,16 @@ garbage_collect() {
             local home_name="${d##*/}"
             local tag="${home_name#home-}"
             local has_gen=0
-            for uki in "${ESP}/EFI/Linux/arch-"*"-${tag}.efi"; do
-                [[ -e "$uki" ]] && { has_gen=1; break; }
+            # Extract tag from each UKI via regex, not glob suffix match.
+            # Glob "*-${tag}.efi" would false-positive on tags sharing
+            # a suffix (e.g. "super-kde" matching home-kde).
+            for uki in "${ESP}/EFI/Linux/arch-"*.efi; do
+                [[ -e "$uki" ]] || continue
+                local uki_gen="${uki##*/}"
+                uki_gen="${uki_gen#arch-}"; uki_gen="${uki_gen%.efi}"
+                local uki_tag=""
+                [[ "$uki_gen" =~ ^[0-9]{8}-[0-9]{6}-(.+)$ ]] && uki_tag="${BASH_REMATCH[1]}"
+                [[ "$uki_tag" == "$tag" ]] && { has_gen=1; break; }
             done
             if [[ $has_gen -eq 0 ]]; then
                 echo "   Orphan home: ${home_name} (no generations with tag '${tag}')"
