@@ -68,7 +68,6 @@ cp "${PROJECT_ROOT}/lib/atomic/"* "${PREFIX}/usr/lib/atomic/"
 # (production code hardcodes defaults; tests need to redirect)
 sed -i \
     -e 's|^CONFIG_FILE="/etc/atomic.conf"|CONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"|' \
-    -e 's|^LOCK_FILE="/var/lock/atomic-upgrade.lock"|LOCK_FILE="${LOCK_FILE:-/var/lock/atomic-upgrade.lock}"|' \
     "${PREFIX}/usr/lib/atomic/common.sh"
 
 # Patch atomic-guard: redirect LIBDIR

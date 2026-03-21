@@ -12,7 +12,7 @@ ESP="/efi"
 KEEP_GENERATIONS=3
 MAPPER_NAME="root_crypt"
 KERNEL_PKG="linux"
-LOCK_FILE="/var/lock/atomic-upgrade.lock"
+LOCK_FILE="${LOCK_FILE:-/run/atomic/atomic-upgrade.lock}"
 SBCTL_SIGN=0
 UPGRADE_GUARD=1
 # Files to copy from /home/<user>/ into isolated homes (space-separated)

@@ -145,7 +145,7 @@ If space cannot be determined, a warning is shown and the operation proceeds.
     Intended for testing.
 
 **LOCK_FILE**
-:   Override path to the lock file (default: */var/lock/atomic-upgrade.lock*).
+:   Override path to the lock file (default: */run/atomic/atomic-upgrade.lock*).
     Intended for testing.
 
 # FILES
@@ -162,7 +162,7 @@ If space cannot be determined, a warning is shown and the operation proceeds.
 */usr/lib/atomic/rootdev.py*
 :   Root device auto-detection and kernel cmdline generation.
 
-*/var/lock/atomic-upgrade.lock*
+*/run/atomic/atomic-upgrade.lock*
 :   Exclusive lock file preventing concurrent operations.
 
 */efi/EFI/Linux/arch-\*.efi*
