@@ -39,7 +39,15 @@ jobs:
               - 'bin/**'
               - 'lib/atomic/common.sh'
               - 'extras/pacman-wrapper'
-              - 'tests/test_common.sh'
+              - 'tests/test_harness.sh'
+              - 'tests/test_config.sh'
+              - 'tests/test_validate.sh'
+              - 'tests/test_device.sh'
+              - 'tests/test_space.sh'
+              - 'tests/test_chroot.sh'
+              - 'tests/test_gc.sh'
+              - 'tests/test_uki.sh'
+              - 'tests/test_home.sh'
               - '.github/workflows/ci.yml'
             python:
               - 'lib/atomic/fstab.py'
@@ -96,7 +104,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: bash tests/test_common.sh
+      - run: |
+          for t in \
+            tests/test_config.sh \
+            tests/test_validate.sh \
+            tests/test_device.sh \
+            tests/test_space.sh \
+            tests/test_chroot.sh \
+            tests/test_gc.sh \
+            tests/test_uki.sh \
+            tests/test_home.sh; do
+            echo "━━━ $t ━━━"
+            bash "$t" || exit 1
+          done
 
   integration-test:
     needs: changes

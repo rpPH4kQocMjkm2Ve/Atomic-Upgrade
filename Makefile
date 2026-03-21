@@ -28,8 +28,24 @@ man/%.5: man/%.5.md
 clean:
 	rm -f $(MANPAGES)
 
+UNIT_TESTS = \
+	tests/test_config.sh \
+	tests/test_validate.sh \
+	tests/test_device.sh \
+	tests/test_space.sh \
+	tests/test_chroot.sh \
+	tests/test_gc.sh \
+	tests/test_uki.sh \
+	tests/test_home.sh
+
 test:
-	bash tests/test_common.sh
+	@for t in $(UNIT_TESTS); do \
+		echo ""; \
+		echo "━━━ $$t ━━━"; \
+		bash "$$t" || exit 1; \
+	done
+	@echo ""
+	@echo "━━━ tests/test_integration.sh ━━━"
 	bash tests/test_integration.sh
 	python -m pytest tests/test_fstab.py -v
 	python -m pytest tests/test_rootdev.py -v
