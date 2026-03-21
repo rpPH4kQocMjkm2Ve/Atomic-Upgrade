@@ -64,12 +64,6 @@ mkdir -p "${PREFIX}/usr/lib/atomic" "${PREFIX}/usr/bin" \
 
 cp "${PROJECT_ROOT}/lib/atomic/"* "${PREFIX}/usr/lib/atomic/"
 
-# Make CONFIG_FILE and LOCK_FILE overridable via environment
-# (production code hardcodes defaults; tests need to redirect)
-sed -i \
-    -e 's|^CONFIG_FILE="/etc/atomic.conf"|CONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"|' \
-    "${PREFIX}/usr/lib/atomic/common.sh"
-
 # Patch atomic-guard: redirect LIBDIR
 sed "s|/usr/lib/atomic|${PREFIX}/usr/lib/atomic|g" \
     "${PROJECT_ROOT}/bin/atomic-guard" > "${PREFIX}/usr/bin/atomic-guard"
