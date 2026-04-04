@@ -10,6 +10,7 @@
 #   - Temporary TESTDIR with EXIT cleanup
 #   - MOCK_BIN on PATH with default mocks
 #   - make_mock / make_mock_in utilities
+#   - Mock call tracking (mock_call_count, mock_last_args, mock_clear_log)
 #   - Sources common.sh with _ATOMIC_NO_INIT=1
 
 set -uo pipefail
@@ -68,6 +69,33 @@ assert_not_contains() {
     fi
 }
 
+assert_file_exists() {
+    local desc="$1" path="$2"
+    if [[ -e "$path" ]]; then
+        ok "$desc"
+    else
+        fail "$desc (missing: $path)"
+    fi
+}
+
+assert_file_not_exists() {
+    local desc="$1" path="$2"
+    if [[ ! -e "$path" ]]; then
+        ok "$desc"
+    else
+        fail "$desc (unexpected: $path)"
+    fi
+}
+
+assert_file_contains() {
+    local desc="$1" needle="$2" file="$3"
+    if grep -qF "$needle" "$file" 2>/dev/null; then
+        ok "$desc"
+    else
+        fail "$desc (needle='$needle' not in $file)"
+    fi
+}
+
 # Run command in subshell, capture rc + combined stdout/stderr.
 # Sets globals: _rc, _out
 # Use when side effects in parent shell are NOT needed.
@@ -91,6 +119,34 @@ section() {
     echo "── $1 ──"
 }
 
+# ── Mock call tracking ──────────────────────────────────────
+
+mock_call_count() {
+    local name="$1"
+    local log="${TESTDIR}/mock_calls_${name}.log"
+    if [[ -f "$log" ]]; then
+        wc -l < "$log" | tr -d ' '
+    else
+        echo "0"
+    fi
+}
+
+mock_last_args() {
+    local name="$1"
+    local log="${TESTDIR}/mock_calls_${name}.log"
+    if [[ -f "$log" ]]; then
+        tail -1 "$log"
+    else
+        echo ""
+    fi
+}
+
+mock_clear_log() {
+    local name="$1"
+    local log="${TESTDIR}/mock_calls_${name}.log"
+    : > "$log"
+}
+
 # ── Setup test environment ───────────────────────────────────
 
 TESTDIR=$(mktemp -d)
@@ -106,11 +162,15 @@ ORIG_PATH="$PATH"
 # Write a mock script into MOCK_BIN.
 # Args: name [body]
 # The body receives all original arguments in $@ / $* / "$1" etc.
+# Automatically logs all calls for mock_call_count / mock_last_args.
 make_mock() {
     local name="$1"; shift
     local body="${*:-exit 0}"
+    local log_file="${TESTDIR}/mock_calls_${name}.log"
+    : > "$log_file"
     cat > "${MOCK_BIN}/${name}" <<ENDSCRIPT
 #!/bin/bash
+printf '%s\n' "\$*" >> "${log_file}"
 ${body}
 ENDSCRIPT
     chmod +x "${MOCK_BIN}/${name}"
@@ -118,6 +178,7 @@ ENDSCRIPT
 
 # Write a mock script into an arbitrary directory.
 # Used by check_dependencies test to create an isolated PATH.
+# Does NOT track calls (isolated PATH tests don't need it).
 make_mock_in() {
     local dir="$1" name="$2"; shift 2
     local body="${*:-exit 0}"
@@ -127,6 +188,25 @@ make_mock_in() {
 ${body}
 ENDSCRIPT
     chmod +x "${dir}/${name}"
+}
+
+# ── Reset atomic globals ────────────────────────────────────
+# Call this between test sections to prevent state leakage.
+
+reset_atomic_globals() {
+    _ROOT_DEVICE=""
+    KEEP_GENERATIONS=3
+    ESP="/efi"
+    BTRFS_MOUNT="/run/atomic/temp_root"
+    NEW_ROOT="/run/atomic/newroot"
+    LOCK_DIR="/run/atomic"
+    LOCK_FILE="${LOCK_DIR}/atomic-upgrade.lock"
+    SBCTL_SIGN=0
+    UPGRADE_GUARD=1
+    HOME_COPY_FILES=""
+    KERNEL_PKG="linux"
+    KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off"
+    CONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"
 }
 
 # ── Prepare environment before sourcing common.sh ────────────
