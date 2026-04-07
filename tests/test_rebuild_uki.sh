@@ -27,6 +27,10 @@ assert_contains "help shows examples" "Examples:" "$_out"
 run_cmd env _ATOMIC_NO_INIT=1 bash "$SCRIPT" -h
 assert_eq "-h → exit 0" "0" "$_rc"
 
+run_cmd env _ATOMIC_NO_INIT=1 bash "$SCRIPT" -V
+assert_eq "-V → exit 0" "0" "$_rc"
+assert_contains "version output" "atomic-rebuild-uki v" "$_out"
+
 # ── GEN_ID validation (patched script — bypasses EUID + validate_config) ──
 
 section "GEN_ID validation (patched script)"

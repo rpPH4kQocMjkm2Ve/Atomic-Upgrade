@@ -10,6 +10,10 @@ if [[ -z "${LIBDIR:-}" ]]; then
     LIBDIR="/usr/lib/atomic"
 fi
 
+# ── Project version ────────────────────────────────────────────────
+
+VERSION="0.1.7"
+
 # ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 BTRFS_MOUNT="/run/atomic/temp_root"
 NEW_ROOT="/run/atomic/newroot"

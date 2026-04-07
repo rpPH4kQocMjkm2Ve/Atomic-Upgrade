@@ -41,6 +41,7 @@ _atomic-gc() {
 
     _arguments -C \
         '(- *)'{-h,--help}'[Show help]' \
+        '(- *)'{-V,--version}'[Show version]' \
         '(-n --dry-run)'{-n,--dry-run}'[Show what would be done]' \
         '1:command:((
             list\:"List all generations"

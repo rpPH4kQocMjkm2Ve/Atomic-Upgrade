@@ -20,7 +20,7 @@ _atomic_gc() {
     fi
 
     if [[ $cword -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "list rm -h --help -n --dry-run" -- "$cur") )
+        COMPREPLY=( $(compgen -W "list rm -h --help -V --version -n --dry-run" -- "$cur") )
         return
     fi
 
