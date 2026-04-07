@@ -38,6 +38,7 @@ _atomic_ruki_gens() {
 _atomic-rebuild-uki() {
     _arguments \
         '(- *)'{-h,--help}'[Show help]' \
+        '(- *)'{-V,--version}'[Show version]' \
         '(- *)'{-l,--list}'[List subvolumes and UKI status]' \
         '1:generation:_atomic_ruki_gens'
 }

@@ -12,11 +12,15 @@ _src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
 _src "${LIBDIR}/common.sh"
 
 show_help() {
-    cat << 'EOF'
-atomic-rebuild-uki - Rebuild UKI for an existing generation
+    cat << EOF
+atomic-rebuild-uki v${VERSION} - Rebuild UKI for an existing generation
 
 Usage: atomic-rebuild-uki <GEN_ID>
        atomic-rebuild-uki --list
+
+Options:
+    -V, --version    Show version
+    -h, --help       Show this help
 
 Examples:
     atomic-rebuild-uki 20250208-134725
@@ -63,6 +67,7 @@ list_orphans() {
 
 case "${1:-}" in
     -h|--help) show_help ;;
+    -V|--version) echo "atomic-rebuild-uki v${VERSION}"; exit 0 ;;
 esac
 
 [[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }

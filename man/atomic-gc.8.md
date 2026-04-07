@@ -61,6 +61,9 @@ warning.
 **-y**, **\--yes**
 :   Skip confirmation prompt (for **rm** subcommand only).
 
+**-V**, **\--version**
+:   Show version and exit.
+
 **-h**, **\--help**
 :   Show usage summary and exit.
 

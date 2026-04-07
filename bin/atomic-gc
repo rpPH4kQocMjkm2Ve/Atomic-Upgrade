@@ -10,7 +10,7 @@ _src "${LIBDIR}/common.sh"
 
 show_help() {
     cat << EOF
-atomic-gc - Manage generations
+atomic-gc v${VERSION} - Manage generations
 
 Usage:
     atomic-gc [OPTIONS] [COUNT]    Garbage collect (keep COUNT, default: $KEEP_GENERATIONS)
@@ -20,6 +20,7 @@ Usage:
 Options:
     -n, --dry-run    Show what would be done
     -y, --yes        Skip confirmation (rm only)
+    -V, --version    Show version
     -h, --help       Show this help
 
 EOF
@@ -28,6 +29,7 @@ EOF
 
 case "${1:-}" in
     -h|--help) show_help ;;
+    -V|--version) echo "atomic-gc v${VERSION}"; exit 0 ;;
 esac
 
 DRY_RUN=0

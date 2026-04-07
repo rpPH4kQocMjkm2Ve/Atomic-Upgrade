@@ -5,7 +5,7 @@ _atomic_rebuild_uki() {
     _init_completion || return
 
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W "-h --help -l --list" -- "$cur") )
+        COMPREPLY=( $(compgen -W "-h --help -V --version -l --list" -- "$cur") )
         return
     fi
 

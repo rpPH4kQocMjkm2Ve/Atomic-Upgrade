@@ -17,6 +17,10 @@ if _p=$(verify-lib "${LIBDIR}/common.sh" "$LIBDIR/" 2>/dev/null) && [[ -n "$_p" 
     fi
 fi
 
+case "${1:-}" in
+    -V|--version) echo "atomic-guard v${VERSION:-unknown}"; exit 0 ;;
+esac
+
 LOCK_DIR="${LOCK_DIR:-/run/atomic}"
 LOCK_FILE="${LOCK_FILE:-${LOCK_DIR}/atomic-upgrade.lock}"
 
