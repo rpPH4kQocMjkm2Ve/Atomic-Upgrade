@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/rpPH4kQocMjkm2Ve/atomic-upgrade/actions/workflows/ci.yml/badge.svg)](https://github.com/rpPH4kQocMjkm2Ve/atomic-upgrade/actions/workflows/ci.yml)
 ![License](https://img.shields.io/github/license/rpPH4kQocMjkm2Ve/atomic-upgrade)
+[![Spec](https://img.shields.io/endpoint?url=https://gitlab.com/fkzys/specs/-/raw/main/version.json&maxAge=300)](https://gitlab.com/fkzys/specs)
 
 Atomic system upgrades for Arch Linux on Btrfs + UKI + optional Secure Boot.
 
