@@ -107,8 +107,9 @@ acquire_lock
 cleanup_rebuild() {
     set +e
     [[ -n "${MOUNT_DIR:-}" ]] && {
-        mountpoint -q "$MOUNT_DIR" 2>/dev/null && umount "$MOUNT_DIR"
-        rmdir "$MOUNT_DIR" 2>/dev/null
+        if mountpoint -q "$MOUNT_DIR" 2>/dev/null && umount "$MOUNT_DIR"; then
+            rmdir "$MOUNT_DIR" 2>/dev/null || true
+        fi
     }
     mountpoint -q "$BTRFS_MOUNT" 2>/dev/null && umount "$BTRFS_MOUNT"
     [[ -n "${LOCK_FD:-}" ]] && exec {LOCK_FD}>&-

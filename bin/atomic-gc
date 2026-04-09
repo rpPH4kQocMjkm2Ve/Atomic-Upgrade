@@ -81,6 +81,7 @@ case "$COMMAND" in
         acquire_lock
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation(s) to delete" >&2; exit 1; }
         ensure_btrfs_mounted || exit 1
+        current_subvol=$(get_current_subvol)
         # Validate all targets exist before deleting any
         for gen_id in "${ARGS[@]}"; do
             if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]] && \
@@ -98,7 +99,7 @@ case "$COMMAND" in
             warn_orphan_homes "${ARGS[@]}"
         fi
         for gen_id in "${ARGS[@]}"; do
-            delete_generation "$gen_id" "$DRY_RUN"
+            delete_generation "$gen_id" "$DRY_RUN" "$current_subvol"
         done
         ;;
     gc)

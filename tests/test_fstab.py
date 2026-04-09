@@ -474,3 +474,25 @@ class TestUpdateFstabHome:
         # Verify that the temp file was cleaned up despite the error
         leftovers = list(tmp_path.glob(".fstab.*.tmp"))
         assert leftovers == [], f"Temp files left behind: {leftovers}"
+
+    def test_atomic_write_fsync_failure_cleanup(self, tmp_path, monkeypatch):
+        """Simulate fsync failure to verify temp file cleanup and OSError propagation."""
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x / btrfs rw,subvol=old 0 0\n")
+
+        original_fsync = os.fsync
+
+        def fail_fsync(fd):
+            raise OSError("Simulated fsync failure")
+
+        monkeypatch.setattr(os, "fsync", fail_fsync)
+
+        with pytest.raises(OSError, match="Simulated fsync failure"):
+            update_fstab(str(path), "old", "new")
+
+        # Verify that the temp file was cleaned up despite the error
+        leftovers = list(tmp_path.glob(".fstab.*.tmp"))
+        assert leftovers == [], f"Temp files left behind: {leftovers}"
+
+        # Verify original fstab is unchanged
+        assert path.read_text() == "UUID=x / btrfs rw,subvol=old 0 0\n"

@@ -134,6 +134,70 @@ grep -q 'rmdir.*MOUNT_DIR' "$SCRIPT" && ok "cleanup removes MOUNT_DIR" || fail "
 grep -q 'umount.*BTRFS_MOUNT' "$SCRIPT" && ok "cleanup unmounts BTRFS" || fail "cleanup unmounts BTRFS"
 assert_contains "cleanup closes lock" 'LOCK_FD' "$_script_content"
 
+# ── Cleanup trap: behavioral test — rmdir only if umount succeeds ──
+
+section "Cleanup trap: behavioral test"
+
+_RMDIR_LOG="${TESTDIR}/rmdir_calls.log"
+_UMOUNT_LOG="${TESTDIR}/umount_calls.log"
+
+# Test 1: umount fails → rmdir must NOT be called
+make_mock umount "echo \"\$*\" >> '${_UMOUNT_LOG}'; exit 1"
+make_mock rmdir "echo \"\$*\" >> '${_RMDIR_LOG}'; exit 0"
+make_mock mountpoint "exit 0"
+
+_TEST_SCRIPT="${TESTDIR}/test-cleanup"
+cat > "$_TEST_SCRIPT" << 'EOF'
+#!/bin/bash
+set -euo pipefail
+MOUNT_DIR="/tmp/fake-mount-dir"
+BTRFS_MOUNT="/run/atomic/temp_btrfs"
+LOCK_FD=""
+EOF
+
+# Append the actual cleanup function from the real script
+sed -n '/^cleanup_rebuild()/,/^}/p' "$SCRIPT" >> "$_TEST_SCRIPT"
+
+cat >> "$_TEST_SCRIPT" << 'EOF'
+trap cleanup_rebuild EXIT
+exit 0
+EOF
+chmod +x "$_TEST_SCRIPT"
+
+PATH="${MOCK_BIN}:${PATH}" bash "$_TEST_SCRIPT" 2>/dev/null || true
+
+if [[ -f "$_UMOUNT_LOG" ]]; then
+    ok "cleanup calls umount (fail path)"
+else
+    fail "cleanup calls umount (fail path)"
+fi
+
+if [[ ! -f "$_RMDIR_LOG" ]]; then
+    ok "rmdir NOT called when umount fails"
+else
+    fail "rmdir NOT called when umount fails (called with: $(cat "$_RMDIR_LOG"))"
+fi
+
+# Test 2: umount succeeds → rmdir IS called
+rm -f "$_RMDIR_LOG" "$_UMOUNT_LOG"
+
+make_mock umount "echo \"\$*\" >> '${_UMOUNT_LOG}'; exit 0"
+make_mock rmdir "echo \"\$*\" >> '${_RMDIR_LOG}'; exit 0"
+
+PATH="${MOCK_BIN}:${PATH}" bash "$_TEST_SCRIPT" 2>/dev/null || true
+
+if [[ -f "$_UMOUNT_LOG" ]]; then
+    ok "cleanup calls umount (success path)"
+else
+    fail "cleanup calls umount (success path)"
+fi
+
+if [[ -f "$_RMDIR_LOG" ]]; then
+    ok "rmdir called when umount succeeds"
+else
+    fail "rmdir called when umount succeeds"
+fi
+
 # ── UKI path construction: verify in real script ──
 
 section "UKI path construction: verify in real script"

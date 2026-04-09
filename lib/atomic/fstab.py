@@ -171,8 +171,13 @@ def _atomic_write(path: Path, entries: list) -> None:
     try:
         os.write(fd, content)
         os.fsync(fd)
-    finally:
+    except OSError:
         os.close(fd)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
     try:
         os.chown(tmp, original_stat.st_uid, original_stat.st_gid)
