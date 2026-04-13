@@ -38,7 +38,8 @@ UNIT_TESTS = \
 	tests/test_uki.sh \
 	tests/test_home.sh \
 	tests/test_upgrade.sh \
-	tests/test_rebuild_uki.sh
+	tests/test_rebuild_uki.sh \
+	tests/test_atomic_gc.sh
 
 test:
 	@for t in $(UNIT_TESTS); do \
