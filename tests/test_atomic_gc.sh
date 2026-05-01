@@ -355,6 +355,20 @@ assert_contains "already protected message" "already protected" "$_out"
 _run_gc protect 20990101-000000
 assert_eq "protect non-existent → rc 1" "1" "$_rc"
 
+# ── protect command: already-active generation ─────────────
+
+touch "${_FAKE_ESP}/EFI/Linux/0-active-arch-20250604-100001.efi"
+rm -f "${_FAKE_ESP}/EFI/Linux/arch-20250604-100001.efi"
+rm -f "${_FAKE_ESP}/EFI/Linux/arch-20250604-100001.efi.protected"
+
+_run_gc protect 20250604-100001
+assert_eq "protect already-active → rc 0" "0" "$_rc"
+assert_contains "protected message for active" "Protected" "$_out"
+assert_file_exists "protected sidecar created for active" "${_FAKE_ESP}/EFI/Linux/arch-20250604-100001.efi.protected"
+
+rm -f "${_FAKE_ESP}/EFI/Linux/0-active-arch-20250604-100001.efi"
+rm -f "${_FAKE_ESP}/EFI/Linux/arch-20250604-100001.efi.protected"
+
 # ── unprotect command ──────────────────────────────────────
 
 section "unprotect command"

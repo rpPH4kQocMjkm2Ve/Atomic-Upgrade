@@ -134,6 +134,7 @@ case "$COMMAND" in
     activate)
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to activate" >&2; exit 1; }
         gen_id="${ARGS[0]}"
+        acquire_lock
         # Validate gen_id format
         if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
             echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
@@ -144,18 +145,23 @@ case "$COMMAND" in
             echo "Generation ${gen_id} is already active"
             exit 0
         fi
-        # Check if UKI exists
-        if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]]; then
+        # Check if UKI exists (regular or active)
+        if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]] && \
+           [[ ! -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]] && \
+           [[ ! -d "${BTRFS_MOUNT}/root-${gen_id}" ]]; then
             echo "ERROR: Generation not found: ${gen_id}" >&2
             exit 1
         fi
         # Rename to add active prefix
-        mv "${ESP}/EFI/Linux/arch-${gen_id}.efi" "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi"
+        if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]]; then
+            mv "${ESP}/EFI/Linux/arch-${gen_id}.efi" "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi"
+        fi
         echo "Activated: ${gen_id} (will boot first)"
         ;;
     deactivate)
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to deactivate" >&2; exit 1; }
         gen_id="${ARGS[0]}"
+        acquire_lock
         # Validate gen_id format
         if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
             echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
@@ -173,6 +179,7 @@ case "$COMMAND" in
     protect)
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to protect" >&2; exit 1; }
         gen_id="${ARGS[0]}"
+        acquire_lock
         # Validate gen_id format
         if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
             echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
@@ -185,7 +192,8 @@ case "$COMMAND" in
         fi
         # Check if UKI exists (could be active or regular)
         if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]] || \
-           [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]]; then
+           [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]] || \
+           [[ -d "${BTRFS_MOUNT}/root-${gen_id}" ]]; then
             touch "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected"
             echo "Protected: ${gen_id} (won't be garbage collected)"
         else
@@ -196,6 +204,7 @@ case "$COMMAND" in
     unprotect)
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to unprotect" >&2; exit 1; }
         gen_id="${ARGS[0]}"
+        acquire_lock
         # Validate gen_id format
         if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
             echo "ERROR: Invalid generation ID format: ${gen_id}" >&2

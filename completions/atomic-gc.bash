@@ -31,7 +31,7 @@ _atomic_gc() {
             else
                 local -a gens=()
                 local f name
-                for f in "$esp"/EFI/Linux/"*arch-"*.efi; do
+                for f in "$esp"/EFI/Linux/*arch-*.efi; do
                     [[ -e "$f" ]] || continue
                     name="${f##*/}"
                     name="${name#0-active-}"
