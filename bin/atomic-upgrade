@@ -18,7 +18,7 @@ show_help() {
     cat << EOF
 atomic-upgrade v${VERSION} - Atomic system upgrades for Arch Linux
 
-Usage: atomic-upgrade [OPTIONS] [-- COMMAND...]
+Usage: atomic-upgrade [OPTIONS] [-- CHROOT_COMMAND...]
 
 Options:
     -n, --dry-run         Show what would be done
@@ -106,9 +106,18 @@ if [[ -n "$CUSTOM_TAG" ]]; then
     fi
 fi
 
-# Default chroot command
+# Default chroot command: use CHROOT_COMMAND from config (or default in common.sh).
+# Note: CHROOT_COMMAND uses simple word splitting; args with spaces inside
+# are not supported (same limitation as HOME_COPY_FILES).
 if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
-    CHROOT_CMD=(/usr/bin/pacman -Syu)
+    [[ -z "${CHROOT_COMMAND:-}" ]] && CHROOT_COMMAND="/usr/bin/pacman -Syu"
+    read -ra CHROOT_CMD <<< "$CHROOT_COMMAND"
+fi
+
+# Warn if CHROOT_COMMAND contains quotes (word splitting doesn't process them)
+if [[ "$CHROOT_COMMAND" =~ [\'\"] ]]; then
+    echo "WARN: CHROOT_COMMAND contains quotes, but word splitting doesn't process them." >&2
+    echo "WARN: Use CLI instead: atomic-upgrade -- pacman -S 'nvidia dkms'" >&2
 fi
 
 # Verify required variables are set
