@@ -27,7 +27,7 @@ Initially, an approach with hash sums in generation names was planned, but that 
 
 Almost all iteration took place in chat with an LLM, because i have no one else to discuss technical ideas with.
 
-The project itself grew inside a dotfiles repository, and later i moved it to a separate repository (about a month later, i think), when i found it more convenient to develop in a dedicated repo.
+The project itself grew inside a rootfiles (aka system-config or root_m) repository, and later i moved it to a separate repository (about a month later, i think), when i found it more convenient to develop in a dedicated repo.
 After that, it grew tests and documentation.
 
 Basically, nearly all the code is discussed with an LLM (sometimes different ones) in several iterations, and new features are tested manually after being covered with tests by the LLM.
