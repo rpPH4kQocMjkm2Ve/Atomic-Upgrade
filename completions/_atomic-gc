@@ -25,8 +25,9 @@ _atomic_gc_gens() {
 
     esp="$(_atomic_gc_esp)"
 
-    for f in "$esp"/EFI/Linux/arch-*.efi(N); do
+    for f in "$esp"/EFI/Linux/(arch-|0-active-arch-)*.efi(N); do
         name="${f:t}"
+        name="${name#0-active-}"
         name="${name#arch-}"
         name="${name%.efi}"
         gens+=("$name")
@@ -46,6 +47,10 @@ _atomic-gc() {
         '1:command:((
             list\:"List all generations"
             rm\:"Delete specific generation(s)"
+            activate\:"Mark generation as active"
+            deactivate\:"Remove active marker"
+            protect\:"Protect generation from GC"
+            unprotect\:"Remove protection from generation"
         ))' \
         '*::arg:->args' \
         && return
@@ -53,7 +58,7 @@ _atomic-gc() {
     case $state in
         args)
             case ${words[1]} in
-                rm)
+                rm|activate|deactivate|protect|unprotect)
                     _arguments \
                         '(-n --dry-run)'{-n,--dry-run}'[Show what would be done]' \
                         '(-y --yes)'{-y,--yes}'[Skip confirmation]' \
