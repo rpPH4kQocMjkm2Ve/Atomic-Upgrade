@@ -66,9 +66,9 @@ rejected entirely.
     page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on
     debugfs=off**.
 
-**COMMAND**
+**CHROOT_COMMAND**
 :   Default command to run in the snapshot chroot, overriding the built-in
-    default of **pacman -Syu**. Command-line **-- COMMAND...** takes priority
+    default of **pacman -Syu**. Command-line **-- CHROOT_COMMAND...** takes priority
     over this setting. Note: arguments with spaces inside are not supported
     due to simple word splitting. Default: *(none)*.
 

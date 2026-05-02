@@ -276,38 +276,38 @@ assert_eq "HOME_COPY_FILES absent → stays empty" "" "$HOME_COPY_FILES"
 # Restore
 HOME_COPY_FILES=""
 
-# ── COMMAND config ───────────────────────────────────
+# ── CHROOT_COMMAND config ───────────────────────────────────
 
-section "COMMAND config"
+section "CHROOT_COMMAND config"
 
-# Test: COMMAND loaded from config
-CONFIG_FILE="${TESTDIR}/command.conf"
+# Test: CHROOT_COMMAND loaded from config
+CONFIG_FILE="${TESTDIR}/chroot_command.conf"
 cat > "$CONFIG_FILE" <<'EOF'
-COMMAND=/usr/bin/pacman -Syu
+CHROOT_COMMAND=/usr/bin/pacman -Syu
 EOF
-COMMAND=""
+CHROOT_COMMAND=""
 load_config
-assert_eq "COMMAND loaded from config" "/usr/bin/pacman -Syu" "$COMMAND"
-COMMAND=""
+assert_eq "CHROOT_COMMAND loaded from config" "/usr/bin/pacman -Syu" "$CHROOT_COMMAND"
+CHROOT_COMMAND=""
 
-# Test: COMMAND with quotes
-CONFIG_FILE="${TESTDIR}/command_quoted.conf"
+# Test: CHROOT_COMMAND with quotes
+CONFIG_FILE="${TESTDIR}/chroot_command_quoted.conf"
 cat > "$CONFIG_FILE" <<'EOF'
-COMMAND="/usr/bin/pacman -S nvidia"
+CHROOT_COMMAND="/usr/bin/pacman -S nvidia"
 EOF
-COMMAND=""
+CHROOT_COMMAND=""
 load_config
-assert_eq "COMMAND with double quotes" "/usr/bin/pacman -S nvidia" "$COMMAND"
-COMMAND=""
+assert_eq "CHROOT_COMMAND with double quotes" "/usr/bin/pacman -S nvidia" "$CHROOT_COMMAND"
+CHROOT_COMMAND=""
 
-# Test: COMMAND absent → stays empty
-CONFIG_FILE="${TESTDIR}/command_absent.conf"
+# Test: CHROOT_COMMAND absent → stays empty
+CONFIG_FILE="${TESTDIR}/chroot_command_absent.conf"
 cat > "$CONFIG_FILE" <<'EOF'
 KEEP_GENERATIONS=3
 EOF
-COMMAND=""
+CHROOT_COMMAND=""
 load_config
-assert_eq "COMMAND absent → stays empty" "" "$COMMAND"
+assert_eq "CHROOT_COMMAND absent → stays empty" "" "$CHROOT_COMMAND"
 
 #
 # ── config key whitespace trimming ─────────────

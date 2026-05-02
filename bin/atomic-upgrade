@@ -18,7 +18,7 @@ show_help() {
     cat << EOF
 atomic-upgrade v${VERSION} - Atomic system upgrades for Arch Linux
 
-Usage: atomic-upgrade [OPTIONS] [-- COMMAND...]
+Usage: atomic-upgrade [OPTIONS] [-- CHROOT_COMMAND...]
 
 Options:
     -n, --dry-run         Show what would be done

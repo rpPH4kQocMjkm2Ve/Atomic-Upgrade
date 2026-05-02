@@ -202,7 +202,7 @@ section "Word splitting limitation (space in args)"
 
 CONFIG_FILE="${TESTDIR}/word_split.conf"
 cat > "$CONFIG_FILE" <<'EOF'
-COMMAND=/usr/bin/pacman -S nvidia driver
+CHROOT_COMMAND=/usr/bin/pacman -S nvidia driver
 EOF
 
 _TEST_SCRIPT_WS="${TESTDIR}/atomic-upgrade-word-split"
@@ -230,13 +230,13 @@ assert_eq "word split: arg[3]" "CHROOT_CMD_3=driver" "$(echo "$_out" | grep '^CH
 
 rm -f "$_TEST_SCRIPT_WS"
 
-# ── CLI -- COMMAND priority over config COMMAND= ────────────
+# ── CLI -- CHROOT_COMMAND priority over config CHROOT_COMMAND= ───────────
 
-section "CLI -- COMMAND priority over config COMMAND="
+section "CLI -- CHROOT_COMMAND priority over config CHROOT_COMMAND="
 
 CONFIG_FILE="${TESTDIR}/cli_priority.conf"
 cat > "$CONFIG_FILE" <<'EOF'
-COMMAND=/usr/bin/pacman -Syu
+CHROOT_COMMAND=/usr/bin/pacman -Syu
 EOF
 
 _TEST_SCRIPT_CLI="${TESTDIR}/atomic-upgrade-cli-priority"
@@ -255,7 +255,7 @@ if [[ "${ATOMIC_EXIT_AFTER_PARSE:-}" == "1" ]]; then\
     for i in "${!CHROOT_CMD[@]}"; do\
         echo "CHROOT_CMD_${i}=${CHROOT_CMD[$i]}"\
     done\
-    echo "COMMAND_FROM_CONFIG=${COMMAND:-}"\
+    echo "CHROOT_COMMAND_FROM_CONFIG=${CHROOT_COMMAND:-}"\
     exit 0\
 fi\
 ' \
@@ -268,7 +268,7 @@ assert_contains "CLI priority: uses CLI args" "CHROOT_CMD_0=/usr/bin/pacman" "$_
 assert_contains "CLI priority: CLI arg[1]" "CHROOT_CMD_1=-S" "$_out"
 assert_contains "CLI priority: CLI arg[2]" "CHROOT_CMD_2=nvidia" "$_out"
 assert_eq "CLI priority: count is 3" "CHROOT_CMD_COUNT=3" "$(echo "$_out" | grep '^CHROOT_CMD_COUNT=')"
-assert_contains "CLI priority: COMMAND loaded from config" "COMMAND_FROM_CONFIG=/usr/bin/pacman -Syu" "$_out"
+assert_contains "CLI priority: CHROOT_COMMAND loaded from config" "CHROOT_COMMAND_FROM_CONFIG=/usr/bin/pacman -Syu" "$_out"
 
 rm -f "$_TEST_SCRIPT_CLI"
 
