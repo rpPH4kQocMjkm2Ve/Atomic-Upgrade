@@ -116,7 +116,7 @@ if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
     # Read null-delimited output directly via process substitution to preserve null bytes
     while IFS= read -r -d '' token; do
         CHROOT_CMD+=("$token")
-    done < <(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" array CHROOT_COMMAND 2>/dev/null)
+    done < <(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" array CHROOT_COMMAND)
 
     if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
         read -ra CHROOT_CMD <<< "$CHROOT_COMMAND"
