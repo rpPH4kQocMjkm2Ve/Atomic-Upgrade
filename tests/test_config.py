@@ -174,6 +174,18 @@ class TestShellOutput:
         assert any(line.startswith("BTRFS_MOUNT=") for line in lines)
         assert any(line.startswith("KEEP_GENERATIONS=") for line in lines)
 
+    def test_shell_output_escapes_spaces(self):
+        config_path = create_temp_config('CHROOT_COMMAND=pacman -S "package with spaces"\n')
+        run_config.config_path = config_path
+        try:
+            code, stdout, stderr = run_config("shell")
+            assert code == 0
+            lines = stdout.split("\n")
+            cmd_line = [l for l in lines if l.startswith("CHROOT_COMMAND=")][0]
+            assert "package with spaces" in cmd_line
+        finally:
+            os.unlink(config_path)
+
 
 class TestArrayOutput:
     def test_array_simple(self):
