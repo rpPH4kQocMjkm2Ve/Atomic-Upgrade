@@ -7,7 +7,7 @@
 # ── Library directory ──────────────────────────────────────────────
 
 if [[ -z "${LIBDIR:-}" ]]; then
-    LIBDIR="/usr/lib/atomic"
+    LIBDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 
 # ── Project version ────────────────────────────────────────────────
