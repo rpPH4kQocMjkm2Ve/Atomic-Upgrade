@@ -113,10 +113,18 @@ fi
 if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
     [[ -z "${CHROOT_COMMAND:-}" ]] && CHROOT_COMMAND="/usr/bin/pacman -Syu"
     CHROOT_CMD=()
-    # Read null-delimited output directly via process substitution to preserve null bytes
-    while IFS= read -r -d '' token; do
-        CHROOT_CMD+=("$token")
-    done < <(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" array CHROOT_COMMAND)
+    # Capture null-delimited output via temp file to reliably detect failures.
+    # Use _ATOMIC_LIB_DIR if available (set by common.sh), else fall back to LIBDIR.
+    _tmp_array=$(mktemp)
+    _cfg_py="${_ATOMIC_LIB_DIR:-${LIBDIR}}/config.py"
+    if CONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}" python3 "${_cfg_py}" array CHROOT_COMMAND > "$_tmp_array" 2>/dev/null; then
+        while IFS= read -r -d '' token; do
+            CHROOT_CMD+=("$token")
+        done < "$_tmp_array"
+    else
+        echo "WARN: config.py failed, falling back to word-split" >&2
+    fi
+    rm -f "$_tmp_array"
 
     if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
         read -ra CHROOT_CMD <<< "$CHROOT_COMMAND"
