@@ -7,8 +7,11 @@
 
 set -euo pipefail
 
-readonly LIBDIR="/usr/lib/atomic"
-_src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
+LIBDIR="/usr/lib/atomic"
+
+_src() {
+    local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1
+}
 
 # Source common.sh early for VERSION (skip auto-init for fast --help/--version)
 _ATOMIC_NO_INIT=1
@@ -113,7 +116,7 @@ if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
     # Read null-delimited output directly via process substitution to preserve null bytes
     while IFS= read -r -d '' token; do
         CHROOT_CMD+=("$token")
-    done < <(CONFIG_FILE="${CONFIG_FILE}" python3 "${LIBDIR}/config.py" array CHROOT_COMMAND 2>/dev/null)
+    done < <(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" array CHROOT_COMMAND 2>/dev/null)
 
     if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
         read -ra CHROOT_CMD <<< "$CHROOT_COMMAND"
