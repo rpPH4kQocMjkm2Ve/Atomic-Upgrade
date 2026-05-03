@@ -128,7 +128,13 @@ class TestParseConfig:
             assert code == 1
             assert "not owned by root" in stderr
         finally:
-            sp.run(["umount", str(real_path)], check=False)
+            result = sp.run(["umount", str(real_path)], capture_output=True)
+            if result.returncode != 0:
+                import sys
+                sys.stderr.write(
+                    f"WARN: umount {real_path} failed (rc={result.returncode}): "
+                    f"{result.stderr.decode('utf-8', 'replace')}\n"
+                )
 
 
 class TestKeyLookup:
