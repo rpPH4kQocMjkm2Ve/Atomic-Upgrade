@@ -48,7 +48,7 @@ run_upgrade() {
 
 # Helper: run with ATOMIC_EXIT_AFTER_PARSE=1 to capture variable state
 run_upgrade_parse() {
-    run_cmd env ATOMIC_EXIT_AFTER_PARSE=1 bash "$TEST_SCRIPT" "$@"
+    run_cmd env ATOMIC_EXIT_AFTER_PARSE=1 CONFIG_FILE="${TESTDIR}/test-empty.conf" bash "$TEST_SCRIPT" "$@"
 }
 
 # ── Help & version (real script, no patching needed) ───────
@@ -348,18 +348,18 @@ _script_content=$(cat "$SCRIPT")
 
 # Output strings that must be present in the dry-run block
 assert_contains "has 'Current -> New' line" "Current:" "$_script_content"
-assert_contains "has snapshot message" "DRY RUN - would create snapshot" "$_script_content"
-assert_contains "has UKI path message" "DRY RUN - would create UKI" "$_script_content"
-assert_contains "has chroot command message" "DRY RUN - chroot command" "$_script_content"
-assert_contains "has GC enabled message" "DRY RUN - would run garbage collection" "$_script_content"
-assert_contains "has GC disabled message" "DRY RUN - garbage collection: disabled" "$_script_content"
-assert_contains "has complete message" "DRY RUN complete, no changes made" "$_script_content"
-assert_contains "has available updates message" "DRY RUN - available updates" "$_script_content"
-assert_contains "has signing disabled message" "DRY RUN - sbctl signing: disabled" "$_script_content"
-assert_contains "has signing enabled message" "DRY RUN - would sign UKI with sbctl" "$_script_content"
-assert_contains "has home isolated message" "Home: isolated" "$_script_content"
-assert_contains "has create home message" "DRY RUN - would create home" "$_script_content"
-assert_contains "has use existing home message" "DRY RUN - would use existing home" "$_script_content"
+assert_contains "has snapshot message" ":: DRY RUN - would create snapshot" "$_script_content"
+assert_contains "has UKI path message" ":: DRY RUN - would create UKI" "$_script_content"
+assert_contains "has chroot command message" ":: DRY RUN - chroot command" "$_script_content"
+assert_contains "has GC enabled message" ":: DRY RUN - would run garbage collection" "$_script_content"
+assert_contains "has GC disabled message" ":: DRY RUN - garbage collection: disabled" "$_script_content"
+assert_contains "has complete message" ":: DRY RUN complete, no changes made" "$_script_content"
+assert_contains "has available updates message" ":: DRY RUN - available updates:" "$_script_content"
+assert_contains "has signing disabled message" ":: DRY RUN - sbctl signing: disabled" "$_script_content"
+assert_contains "has signing enabled message" ":: DRY RUN - would sign UKI with sbctl" "$_script_content"
+assert_contains "has home isolated message" ":: Home: isolated" "$_script_content"
+assert_contains "has create home message" ":: DRY RUN - would create home" "$_script_content"
+assert_contains "has use existing home message" ":: DRY RUN - would use existing home" "$_script_content"
 
 # Conditional structures that control branching
 assert_contains "has NO_GC conditional" '"$NO_GC" -eq 0' "$_script_content"
